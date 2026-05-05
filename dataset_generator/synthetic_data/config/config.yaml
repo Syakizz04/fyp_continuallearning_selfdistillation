@@ -1,0 +1,146 @@
+simulation:
+  start_date: "2023-01-01"
+  end_date: "2025-12-31"
+  random_seed: 42
+
+regions:
+  - id: "WCP"
+    name: "West Coast Peninsular"
+    states: ["Perlis", "Kedah", "Penang", "Perak", "Selangor", "Kuala Lumpur", "Putrajaya", "Negeri Sembilan", "Melaka", "Johor"]
+    demand_multiplier: 1.0
+    elasticity_multiplier: 1.0
+    mega_sale_adoption: 1.0
+    cny_weight: 1.0
+    raya_weight: 1.0
+    ramadan_weight: 1.0
+    christmas_weight: 0.4
+
+  - id: "ECP"
+    name: "East Coast Peninsular"
+    states: ["Kelantan", "Terengganu", "Pahang"]
+    demand_multiplier: 0.6
+    elasticity_multiplier: 1.4
+    mega_sale_adoption: 0.65
+    cny_weight: 0.3
+    raya_weight: 1.6
+    ramadan_weight: 1.7
+    christmas_weight: 0.2
+
+  - id: "BRN"
+    name: "Borneo"
+    states: ["Sabah", "Sarawak", "Labuan"]
+    demand_multiplier: 0.75
+    elasticity_multiplier: 1.2
+    mega_sale_adoption: 0.75
+    cny_weight: 0.7
+    raya_weight: 1.1
+    ramadan_weight: 1.0
+    christmas_weight: 1.0
+
+skus:
+  - id: "P001"
+    name: "Baju Raya Fashion"
+    category: "Fashion"
+    base_daily_demand: 150
+    unit_cost: 45.0
+    base_price: 89.0
+    price_min: 55.0
+    price_max: 150.0
+    trend_slope: 0.04
+    elasticity_base: -1.6
+    primary_shock: "raya"
+    primary_shock_magnitude: 8.0
+    secondary_shock: "cny"
+    secondary_shock_magnitude: 2.0
+    mega_sale_sensitivity: 0.8
+
+  - id: "P002"
+    name: "Consumer Electronics"
+    category: "Electronics"
+    base_daily_demand: 80
+    unit_cost: 800.0
+    base_price: 1299.0
+    price_min: 999.0
+    price_max: 1799.0
+    trend_slope: 0.09
+    elasticity_base: -1.9
+    primary_shock: "11.11"
+    primary_shock_magnitude: 10.0
+    secondary_shock: "cny"
+    secondary_shock_magnitude: 6.0
+    mega_sale_sensitivity: 1.4
+
+  - id: "P003"
+    name: "Festive Food & Groceries"
+    category: "Food"
+    base_daily_demand: 300
+    unit_cost: 8.0
+    base_price: 18.0
+    price_min: 12.0
+    price_max: 28.0
+    trend_slope: 0.01
+    elasticity_base: -1.2
+    primary_shock: "ramadan"
+    primary_shock_magnitude: 4.0
+    secondary_shock: "raya"
+    secondary_shock_magnitude: 3.0
+    mega_sale_sensitivity: 0.5
+
+seasonality:
+  weekly_amplitude: 0.15
+  annual_amplitude: 0.20
+  noise_std: 0.08
+
+payday:
+  government_day: 25
+  private_start: 1
+  private_end: 3
+  government_boost: 0.12
+  private_boost: 0.09
+
+competitor:
+  price_tracking_noise: 0.05
+  undercut_probability: 0.3
+  undercut_range: [0.03, 0.12]
+
+inventory:
+  initial_stock_days: 60
+  reorder_threshold_days: 14
+  reorder_quantity_days: 45
+
+cl_tasks:
+  - task_id: 1
+    task_name: "Baseline_2023_H1"
+    start_date: "2023-01-01"
+    end_date: "2023-05-31"
+    description: "Normal baseline with CNY and pre-Raya 2023"
+
+  - task_id: 2
+    task_name: "MegaSale_2023"
+    start_date: "2023-06-01"
+    end_date: "2023-12-31"
+    description: "Mega sale regime 2023 H2 including 11.11 and 12.12"
+
+  - task_id: 3
+    task_name: "Baseline_2024_H1"
+    start_date: "2024-01-01"
+    end_date: "2024-05-31"
+    description: "Baseline with shifted CNY and Raya 2024 - lunar drift test"
+
+  - task_id: 4
+    task_name: "MegaSale_2024"
+    start_date: "2024-06-01"
+    end_date: "2024-12-31"
+    description: "Mega sale regime 2024 H2"
+
+  - task_id: 5
+    task_name: "Baseline_2025_H1"
+    start_date: "2025-01-01"
+    end_date: "2025-05-31"
+    description: "Baseline with second lunar drift - backward transfer measurement"
+
+  - task_id: 6
+    task_name: "MegaSale_2025"
+    start_date: "2025-06-01"
+    end_date: "2025-12-31"
+    description: "Mega sale regime 2025 H2"
