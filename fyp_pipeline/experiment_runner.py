@@ -182,7 +182,6 @@ FORECAST_TRAINERS = {
     "sdft"  : train_forecast_sdft,
 }
 
-console.print("[green]✓ Forecasting CL trainers ready[/green]")
 
 
 
@@ -430,7 +429,6 @@ RL_TRAINERS = {
     "sdft"  : train_rl_sdft,
 }
 
-console.print("[green]✓ RL CL trainers ready[/green]")
 
 
 

@@ -46,44 +46,75 @@ def make_tft_dataset(
     Build a TimeSeriesDataSet for a given task's data slice.
     For validation/test splits, pass the training_dataset to align normalisation.
     """
+    df = df.copy()
+
+    # PyTorch Forecasting requires time_idx to be integer, not float/string/datetime.
+    if "time_idx" not in df.columns:
+        raise ValueError("Missing required column: time_idx")
+
+    if df["time_idx"].isna().any():
+        raise ValueError("time_idx contains missing values")
+
+    df["time_idx"] = df["time_idx"].astype("int64")
+
+    # Group IDs and static categoricals must be string/categorical-friendly.
+    for col in CONFIG["forecasting"]["group_ids"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
+
+    for col in CONFIG["forecasting"]["static_categoricals"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
+
+    # Target should be numeric.
+    df["demand"] = pd.to_numeric(df["demand"], errors="coerce")
+    if df["demand"].isna().any():
+        raise ValueError("demand contains non-numeric or missing values after conversion")
+
     enc_len  = CONFIG["forecasting"]["encoder_length"]
     pred_len = CONFIG["forecasting"]["prediction_length"]
 
     known_reals = [c for c in CONFIG["forecasting"]["known_reals"] if c in df.columns]
 
+    # Known real covariates should be numeric.
+    for col in known_reals:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        if df[col].isna().any():
+            df[col] = df[col].fillna(0)
+
     if train or training_dataset is None:
         ds = TimeSeriesDataSet(
             df,
-            time_idx                 = "time_idx",
-            target                   = "demand",
-            group_ids                = CONFIG["forecasting"]["group_ids"],
-            min_encoder_length       = enc_len // 2,
-            max_encoder_length       = enc_len,
-            min_prediction_length    = 1,
-            max_prediction_length    = pred_len,
-            static_categoricals      = CONFIG["forecasting"]["static_categoricals"],
-            static_reals             = [],
-            time_varying_known_reals = known_reals,
-            time_varying_unknown_reals = ["demand"],
-            target_normalizer        = GroupNormalizer(
+            time_idx="time_idx",
+            target="demand",
+            group_ids=CONFIG["forecasting"]["group_ids"],
+            min_encoder_length=enc_len // 2,
+            max_encoder_length=enc_len,
+            min_prediction_length=1,
+            max_prediction_length=pred_len,
+            static_categoricals=CONFIG["forecasting"]["static_categoricals"],
+            static_reals=[],
+            time_varying_known_reals=known_reals,
+            time_varying_unknown_reals=["demand"],
+            target_normalizer=GroupNormalizer(
                 groups=CONFIG["forecasting"]["group_ids"],
                 transformation="softplus",
             ),
-            add_relative_time_idx    = True,
-            add_target_scales        = True,
-            add_encoder_length       = True,
-            allow_missing_timesteps  = allow_missing_timesteps,
+            add_relative_time_idx=True,
+            add_target_scales=True,
+            add_encoder_length=True,
+            allow_missing_timesteps=allow_missing_timesteps,
         )
     else:
-        # Align with training dataset (same normalisation)
         ds = TimeSeriesDataSet.from_dataset(
-            training_dataset, df,
-            predict             = predict_mode,
-            stop_randomization  = True,
-            allow_missing_timesteps = allow_missing_timesteps,
+            training_dataset,
+            df,
+            predict=predict_mode,
+            stop_randomization=True,
+            allow_missing_timesteps=allow_missing_timesteps,
         )
-    return ds
 
+    return ds
 
 def make_tft_loaders(
     train_df: pd.DataFrame,
@@ -131,7 +162,6 @@ def make_tft_loaders(
 
     return train_ds, train_loader, val_loader
 
-console.print("[green]✓ TFT dataset builders ready[/green]")
 
 
 
@@ -317,7 +347,6 @@ def build_cltft(training_dataset: TimeSeriesDataSet, cl_method: str) -> CLTFT:
     )
     return model
 
-console.print("[green]✓ CLTFT class defined[/green]")
 
 
 
@@ -469,9 +498,6 @@ class DynamicPricingEnv(gym.Env):
 def make_pricing_env(task_df: pd.DataFrame) -> DummyVecEnv:
     return DummyVecEnv([lambda df=task_df: DynamicPricingEnv(df)])
 
-console.print("[green]✓ DynamicPricingEnv defined[/green]")
-console.print(f"  State dim : {DynamicPricingEnv.STATE_DIM}")
-console.print(f"  Actions   : {DynamicPricingEnv.PRICE_TIERS}")
 
 
 
@@ -661,10 +687,6 @@ def compute_bwt_fwt(
 
     return bwt, fwt
 
-console.print("[green]✓ Metric functions ready[/green]")
-console.print("  Forecasting : MASE (primary), sMAPE, RMSE")
-console.print("  RL          : Cumulative Profit, Avg Episode Reward, Pricing Regret")
-console.print("  CL          : BWT, FWT")
 
 
 
@@ -863,8 +885,6 @@ class PPOEWCEngine:
                 penalty += (fisher * (param - opt_p).pow(2)).sum()
         return (self.lambda_ewc / 2.0) * penalty
 
-console.print("[green]✓ CL engines ready[/green]")
-console.print("  ForecastingReplayBuffer | RLReplayBuffer | RLTeacherStore | PPOEWCEngine")
 
 
 
@@ -984,5 +1004,4 @@ class CheckpointManager:
 LOGGER  = ResultsLogger()
 CKPT_MGR = CheckpointManager()
 
-console.print("[green]✓ ResultsLogger and CheckpointManager ready[/green]")
 

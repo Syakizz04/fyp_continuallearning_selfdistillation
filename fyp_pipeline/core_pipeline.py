@@ -30,6 +30,14 @@ random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(SEED)
 
+# ── Hardware detection ─────────────────────────────────────────────────────
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+BF16_OK = False
+if torch.cuda.is_available():
+    major, minor = torch.cuda.get_device_capability()
+    BF16_OK = major >= 8
+
 CONFIG = {
     # ── Paths ──────────────────────────────────────────────────────────────
     "paths": {
@@ -168,12 +176,6 @@ def ckpt_path(model_type: str, cl_method: str, task_id: int, suffix="") -> str:
     base.mkdir(parents=True, exist_ok=True)
     name = f"task{task_id}{('_' + suffix) if suffix else ''}.ckpt"
     return str(base / name)
-
-console.print("[bold green]✓ CONFIG loaded[/bold green]")
-console.print(f"  Model types : {CONFIG['model_types']}")
-console.print(f"  CL methods  : {CONFIG['cl_methods']}")
-console.print(f"  Tasks       : {len(CONFIG['tasks'])}")
-console.print(f"  Precision   : {CONFIG['hardware']['precision']}")
 
 
 # ─── Cell: Data Loading, Cleaning & Preprocessing ────────────────────────────
