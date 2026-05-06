@@ -152,7 +152,7 @@ CONFIG = {
     # ── RTX 5090 Optimizations ────────────────────────────────────────────
     "hardware": {
         "device"          : DEVICE,
-        "precision"       : "bf16-mixed" if BF16_OK else "32",
+        "precision"       : "32",
         # torch.compile can be unstable with Lightning + PyTorch Forecasting RNNs
         # across repeated continual-learning fits. Opt in with FYP_TORCH_COMPILE=1.
         "compile"         : os.environ.get("FYP_TORCH_COMPILE", "0") == "1",
@@ -377,7 +377,7 @@ def configure_vast_ai(
         CONFIG["paths"]["plots"] = str(out_path / "plots")
 
     CONFIG["hardware"]["device"] = DEVICE
-    CONFIG["hardware"]["precision"] = "bf16-mixed" if BF16_OK else "32"
+    CONFIG["hardware"]["precision"] = "32"
     CONFIG["hardware"]["compile"] = os.environ.get("FYP_TORCH_COMPILE", "0") == "1"
     CONFIG["hardware"]["pin_memory"] = torch.cuda.is_available()
 
