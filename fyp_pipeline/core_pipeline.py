@@ -4,6 +4,7 @@
 
 import os
 import random
+import logging
 import warnings
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -16,6 +17,10 @@ from rich.table import Table
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+logging.getLogger("lightning").setLevel(logging.WARNING)
+logging.getLogger("lightning.pytorch").setLevel(logging.WARNING)
+logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
 console = Console()
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -148,11 +153,15 @@ CONFIG = {
     "hardware": {
         "device"          : DEVICE,
         "precision"       : "bf16-mixed" if BF16_OK else "32",
-        "compile"         : torch.cuda.is_available(),
-        "compile_mode"    : "reduce-overhead",  # safe for variable batch sizes
-        "num_workers"     : 4,
+        # torch.compile can be unstable with Lightning + PyTorch Forecasting RNNs
+        # across repeated continual-learning fits. Opt in with FYP_TORCH_COMPILE=1.
+        "compile"         : os.environ.get("FYP_TORCH_COMPILE", "0") == "1",
+        "compile_mode"    : "reduce-overhead",
+        # Keep workers at 0 by default for notebooks/Vast.ai to avoid fork
+        # deprecation spam and child-process deadlocks in already-threaded kernels.
+        "num_workers"     : int(os.environ.get("FYP_NUM_WORKERS", "0")),
         "pin_memory"      : torch.cuda.is_available(),
-        "persistent_workers": True,
+        "persistent_workers": False,
     },
 
     # ── Metrics ───────────────────────────────────────────────────────────
@@ -369,7 +378,7 @@ def configure_vast_ai(
 
     CONFIG["hardware"]["device"] = DEVICE
     CONFIG["hardware"]["precision"] = "bf16-mixed" if BF16_OK else "32"
-    CONFIG["hardware"]["compile"] = torch.cuda.is_available()
+    CONFIG["hardware"]["compile"] = os.environ.get("FYP_TORCH_COMPILE", "0") == "1"
     CONFIG["hardware"]["pin_memory"] = torch.cuda.is_available()
 
     ensure_output_dirs()

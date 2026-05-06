@@ -3,6 +3,8 @@
 import random
 import time
 import traceback
+import logging
+import warnings
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -24,6 +26,11 @@ from .trainers import (
     build_cltft, compute_bwt_fwt, evaluate_forecasting, evaluate_rl,
     make_pricing_env, make_tft_dataset, make_tft_loaders, MIN_ROWS_NEEDED,
 )
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+logging.getLogger("lightning").setLevel(logging.WARNING)
+logging.getLogger("lightning.pytorch").setLevel(logging.WARNING)
+logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
 
 # ─── Cell: Forecasting CL Trainers (Naive / EWC / Replay / SDFT) ─────────────
@@ -67,14 +74,23 @@ def _make_lightning_trainer(cl_method: str, task_id: int) -> L.Trainer:
     )
 
 
+def _prepare_forecast_model_for_fit(model: CLTFT) -> CLTFT:
+    model.train()
+    original = getattr(model, "_orig_mod", None)
+    if original is not None:
+        original.train()
+    return model
+
+
 def train_forecast_naive(task_id: int, train_loader, val_loader, train_ds, train_df) -> CLTFT:
     """Standard fine-tuning — no forgetting mitigation."""
     model = _fc_model_state["naive"]
     if model is None:
         model = build_cltft(train_ds, cl_method="naive")
-        if CONFIG["hardware"]["compile"]:
+        if CONFIG["hardware"].get("compile", False):
             model = torch.compile(model, mode=CONFIG["hardware"]["compile_mode"])
     trainer = _make_lightning_trainer("naive", task_id)
+    model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, train_loader, val_loader)
     _fc_model_state["naive"] = model
     return model, trainer
@@ -85,10 +101,11 @@ def train_forecast_ewc(task_id: int, train_loader, val_loader, train_ds, train_d
     model = _fc_model_state["ewc"]
     if model is None:
         model = build_cltft(train_ds, cl_method="ewc")
-        if CONFIG["hardware"]["compile"]:
+        if CONFIG["hardware"].get("compile", False):
             model = torch.compile(model, mode=CONFIG["hardware"]["compile_mode"])
 
     trainer = _make_lightning_trainer("ewc", task_id)
+    model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, train_loader, val_loader)
 
     # Compute Fisher AFTER training on this task (for next task)
@@ -107,7 +124,7 @@ def train_forecast_replay(task_id: int, train_loader, val_loader, train_ds, trai
     model = _fc_model_state["replay"]
     if model is None:
         model = build_cltft(train_ds, cl_method="replay")
-        if CONFIG["hardware"]["compile"]:
+        if CONFIG["hardware"].get("compile", False):
             model = torch.compile(model, mode=CONFIG["hardware"]["compile_mode"])
 
     buf = _fc_replay_buf["replay"]
@@ -144,6 +161,7 @@ def train_forecast_replay(task_id: int, train_loader, val_loader, train_ds, trai
         mixed_loader = train_loader
 
     trainer = _make_lightning_trainer("replay", task_id)
+    model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, mixed_loader, val_loader)
 
     # Store current task data in replay buffer
@@ -161,7 +179,7 @@ def train_forecast_sdft(task_id: int, train_loader, val_loader, train_ds, train_
     model = _fc_model_state["sdft"]
     if model is None:
         model = build_cltft(train_ds, cl_method="sdft")
-        if CONFIG["hardware"]["compile"]:
+        if CONFIG["hardware"].get("compile", False):
             model = torch.compile(model, mode=CONFIG["hardware"]["compile_mode"])
     else:
         # Store current model as teacher before training on new task
@@ -169,6 +187,7 @@ def train_forecast_sdft(task_id: int, train_loader, val_loader, train_ds, train_
         console.print(f"  [cyan]SDFT teacher updated from task {task_id - 1}[/cyan]")
 
     trainer = _make_lightning_trainer("sdft", task_id)
+    model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, train_loader, val_loader)
 
     _fc_model_state["sdft"] = model

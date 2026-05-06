@@ -203,21 +203,39 @@ class CLTFT(TemporalFusionTransformer):
             return tuple(self._move_to_device(v) for v in obj)
         return obj
 
+    def _prediction_from_output(self, output):
+        if isinstance(output, dict):
+            return output.get("prediction", output.get("output"))
+        if hasattr(output, "prediction"):
+            return output.prediction
+        return output
+
+    def _add_auxiliary_loss(self, step_output, aux_loss: torch.Tensor):
+        if isinstance(step_output, dict):
+            if "loss" not in step_output:
+                raise TypeError("Expected training_step output dict to contain a 'loss' key")
+            merged = dict(step_output)
+            merged["loss"] = merged["loss"] + aux_loss
+            return merged
+        if isinstance(step_output, torch.Tensor):
+            return step_output + aux_loss
+        raise TypeError(f"Unsupported training_step output type: {type(step_output)!r}")
+
     # ── Training step override ─────────────────────────────────────────────
     def training_step(self, batch, batch_idx):
-        loss = super().training_step(batch, batch_idx)
+        step_output = super().training_step(batch, batch_idx)
 
         if self.cl_method == "ewc" and self.ewc_fisher:
             ewc_penalty = self._ewc_loss()
-            self.log("ewc_penalty", ewc_penalty.item(), prog_bar=False, on_step=True)
-            loss = loss + ewc_penalty
+            self.log("ewc_penalty", ewc_penalty.detach(), prog_bar=False, on_step=True)
+            step_output = self._add_auxiliary_loss(step_output, ewc_penalty)
 
         elif self.cl_method == "sdft" and self.teacher is not None:
             sdft_penalty = self._sdft_loss(batch)
-            self.log("sdft_penalty", sdft_penalty.item(), prog_bar=False, on_step=True)
-            loss = loss + sdft_penalty
+            self.log("sdft_penalty", sdft_penalty.detach(), prog_bar=False, on_step=True)
+            step_output = self._add_auxiliary_loss(step_output, sdft_penalty)
 
-        return loss
+        return step_output
 
     # ── EWC penalty ────────────────────────────────────────────────────────
     def _ewc_loss(self) -> torch.Tensor:
@@ -235,7 +253,7 @@ class CLTFT(TemporalFusionTransformer):
         Compute diagonal Fisher Information Matrix over dataloader.
         Called AFTER training on a task, BEFORE moving to the next.
         """
-        self.eval()
+        self.train()
         fisher_acc: Dict[str, torch.Tensor] = {
             n: torch.zeros_like(p)
             for n, p in self.named_parameters() if p.requires_grad
@@ -252,12 +270,7 @@ class CLTFT(TemporalFusionTransformer):
                 y = self._move_to_device(y)
 
                 out  = self(x)
-                if isinstance(out, dict):
-                    pred = out.get("prediction", out.get("output"))
-                elif hasattr(out, "prediction"):
-                    pred = out.prediction
-                else:
-                    pred = out
+                pred = self._prediction_from_output(out)
 
                 # Use sum of output as proxy loss for Fisher estimation
                 loss = pred.sum()
@@ -301,20 +314,10 @@ class CLTFT(TemporalFusionTransformer):
             self.teacher.eval()
             self.teacher.to(self.device)
             t_out  = self.teacher(x_dev)
-            if isinstance(t_out, dict):
-                t_pred = t_out["prediction"]
-            elif hasattr(t_out, "prediction"):
-                t_pred = t_out.prediction
-            else:
-                t_pred = t_out
+            t_pred = self._prediction_from_output(t_out)
 
         s_out  = self(x_dev)
-        if isinstance(s_out, dict):
-            s_pred = s_out["prediction"]
-        elif hasattr(s_out, "prediction"):
-            s_pred = s_out.prediction
-        else:
-            s_pred = s_out
+        s_pred = self._prediction_from_output(s_out)
 
         # Soft MSE distillation (scaled by temperature)
         sdft_loss = F.mse_loss(s_pred / T, t_pred.detach() / T)
@@ -547,6 +550,7 @@ def evaluate_forecasting(
     Run inference on val_loader and compute MASE, sMAPE, RMSE.
     Returns dict of metric_name → value.
     """
+    was_training = model.training
     model.eval()
     all_preds, all_true = [], []
 
@@ -582,6 +586,9 @@ def evaluate_forecasting(
     except Exception as e:
         console.print(f"  [red]Forecast eval error: {e}[/red]")
         return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
+    finally:
+        if was_training:
+            model.train()
 
     if not all_preds:
         return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
