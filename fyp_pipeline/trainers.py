@@ -32,8 +32,14 @@ from .core_pipeline import CONFIG, DEVICE, SEED, ckpt_path, console
 # ─── Cell: PyTorch Forecasting TimeSeriesDataSet Builder ─────────────────────
 from pytorch_forecasting.data import GroupNormalizer
 
-# Minimum rows needed for one encoder+prediction window
-MIN_ROWS_NEEDED = CONFIG["forecasting"]["encoder_length"] + CONFIG["forecasting"]["prediction_length"]
+# Minimum rows needed for one encoder+prediction window. Keep this dynamic
+# because smoke tests/notebooks may shrink CONFIG after importing the module.
+def min_tft_rows() -> int:
+    fc = CONFIG["forecasting"]
+    return fc["encoder_length"] + fc["prediction_length"]
+
+
+MIN_ROWS_NEEDED = min_tft_rows()
 
 def make_tft_dataset(
     df: pd.DataFrame,
@@ -116,6 +122,45 @@ def make_tft_dataset(
 
     return ds
 
+
+def filter_tft_eval_frame(df: pd.DataFrame, min_length: int = None) -> pd.DataFrame:
+    """
+    Keep only groups with enough rows for at least one encoder/decoder window.
+    This prevents TimeSeriesDataSet from filtering everything and then failing
+    downstream in sklearn scalers with a 0-sample array.
+    """
+    fc = CONFIG["forecasting"]
+    group_ids = fc["group_ids"]
+    min_length = min_length or min_tft_rows()
+
+    if df is None or df.empty:
+        return pd.DataFrame(columns=[] if df is None else df.columns)
+
+    kept = []
+    dropped = []
+    for group_key, group_df in df.groupby(group_ids, observed=False):
+        if len(group_df) >= min_length:
+            kept.append(group_df)
+        else:
+            dropped.append((group_key, len(group_df)))
+
+    if dropped:
+        preview = ", ".join(f"{key}:{n}" for key, n in dropped[:5])
+        suffix = "..." if len(dropped) > 5 else ""
+        console.print(
+            f"  [yellow]Skipped {len(dropped)} eval group(s) with fewer than "
+            f"{min_length} rows: {preview}{suffix}[/yellow]"
+        )
+
+    if not kept:
+        console.print(
+            f"  [yellow]No valid eval groups remain after requiring {min_length} rows[/yellow]"
+        )
+        return df.iloc[0:0].copy()
+
+    return pd.concat(kept, axis=0).sort_values(group_ids + ["time_idx"]).reset_index(drop=True)
+
+
 def make_tft_loaders(
     train_df: pd.DataFrame,
     val_df:   Optional[pd.DataFrame] = None,
@@ -130,10 +175,11 @@ def make_tft_loaders(
 
     train_df = train_df.sort_values(CONFIG["forecasting"]["group_ids"] + ["time_idx"]).copy()
     enc_len = fc["encoder_length"]
+    min_rows_needed = min_tft_rows()
 
     # 80/20 split within task if no explicit val_df given. Keep encoder context
     # in val_df so each series has enough history for validation windows.
-    if val_df is None and len(train_df) > MIN_ROWS_NEEDED * 2:
+    if val_df is None and len(train_df) > min_rows_needed * 2:
         unique_times = np.sort(train_df["time_idx"].unique())
         cutoff = int(len(unique_times) * 0.8)
         split_idx = unique_times[cutoff]
@@ -156,7 +202,10 @@ def make_tft_loaders(
     train_loader = train_ds.to_dataloader(train=True, shuffle=True,  **loader_kwargs)
 
     val_loader = None
-    if val_df is not None and len(val_df) >= MIN_ROWS_NEEDED:
+    if val_df is not None and len(val_df) >= min_rows_needed:
+        val_df = filter_tft_eval_frame(val_df, min_length=min_rows_needed)
+        if val_df.empty:
+            return train_ds, train_loader, None
         val_ds     = make_tft_dataset(val_df, train=False, training_dataset=val_base_ds)
         val_loader = val_ds.to_dataloader(train=False, shuffle=False, **loader_kwargs)
 
@@ -220,6 +269,18 @@ class CLTFT(TemporalFusionTransformer):
         if isinstance(step_output, torch.Tensor):
             return step_output + aux_loss
         raise TypeError(f"Unsupported training_step output type: {type(step_output)!r}")
+
+    def create_log(self, *args, **kwargs):
+        """Disable PyTorch Forecasting's figure logging; scalar logs still work."""
+        return {}
+
+    def log_interpretation(self, *args, **kwargs):
+        """Disable TFT interpretation figures, which can crash TensorBoard image conversion."""
+        return None
+
+    def on_epoch_end(self, *args, **kwargs):
+        """Skip TFT epoch-end interpretation logging."""
+        return None
 
     # ── Training step override ─────────────────────────────────────────────
     def training_step(self, batch, batch_idx):
@@ -343,7 +404,8 @@ def build_cltft(training_dataset: TimeSeriesDataSet, cl_method: str) -> CLTFT:
         hidden_continuous_size = fc["hidden_continuous_size"],
         output_size            = fc["output_size"],
         loss                   = QuantileLoss(),
-        log_interval           = 20,
+        log_interval           = -1,
+        log_val_interval       = -1,
         reduce_on_plateau_patience = 3,
         cl_method              = cl_method,
         cl_cfg                 = CONFIG["cl"],
@@ -515,20 +577,35 @@ def compute_mase(
     seasonality: int = 7,
 ) -> float:
     """
-    Mean Absolute Scaled Error using Darts.
-    y_train is the in-sample series used to compute the naive seasonal baseline.
+    Mean Absolute Scaled Error using a historical in-sample baseline.
+
+    Darts requires explicit time alignment where the insample series ends before
+    the prediction series begins. The experiment evaluates flattened batches
+    from multiple product/region series, so using Darts' default indexes makes
+    the train and prediction series start at the same point and raises:
+    "insample series must start before the pred_series". Computing MASE directly
+    avoids that indexing failure while preserving the metric definition.
     """
-    try:
-        ts_true  = TimeSeries.from_values(y_true.reshape(-1, 1))
-        ts_pred  = TimeSeries.from_values(y_pred.reshape(-1, 1))
-        ts_train = TimeSeries.from_values(y_train.reshape(-1, 1))
-        return float(darts_mase(ts_true, ts_pred, ts_train, m=seasonality))
-    except Exception:
-        # Fallback: manual MASE
-        n       = len(y_true)
-        mae     = np.mean(np.abs(y_true - y_pred))
-        naive   = np.mean(np.abs(y_train[seasonality:] - y_train[:-seasonality]))
-        return float(mae / max(naive, 1e-8))
+    y_true = np.asarray(y_true, dtype=float).reshape(-1)
+    y_pred = np.asarray(y_pred, dtype=float).reshape(-1)
+    y_train = np.asarray(y_train, dtype=float).reshape(-1)
+
+    if len(y_true) == 0 or len(y_pred) == 0:
+        return np.nan
+    if len(y_true) != len(y_pred):
+        n = min(len(y_true), len(y_pred))
+        y_true = y_true[:n]
+        y_pred = y_pred[:n]
+
+    mae = np.mean(np.abs(y_true - y_pred))
+    if len(y_train) <= seasonality:
+        naive = np.mean(np.abs(np.diff(y_train))) if len(y_train) > 1 else np.nan
+    else:
+        naive = np.mean(np.abs(y_train[seasonality:] - y_train[:-seasonality]))
+
+    if not np.isfinite(naive) or naive <= 1e-8:
+        return np.nan
+    return float(mae / naive)
 
 
 def compute_smape(y_true: np.ndarray, y_pred: np.ndarray) -> float:

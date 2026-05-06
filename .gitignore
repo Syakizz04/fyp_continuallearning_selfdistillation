@@ -2,10 +2,7 @@
 __pycache__/
 *.py[cod]
 
-outputs/checkpoints/
-outputs/logs/
-outputs/plots/
-outputs/results/
+outputs/
 
 dataset_generator/synthetic_data/output/
 

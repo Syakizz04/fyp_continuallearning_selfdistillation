@@ -24,7 +24,8 @@ from .trainers import (
     CKPT_MGR, LOGGER, CLTFT, DynamicPricingEnv, ForecastingReplayBuffer,
     PPOEWCEngine, RLReplayBuffer, RLTeacherStore, TimeSeriesDataSet,
     build_cltft, compute_bwt_fwt, evaluate_forecasting, evaluate_rl,
-    make_pricing_env, make_tft_dataset, make_tft_loaders, MIN_ROWS_NEEDED,
+    filter_tft_eval_frame, make_pricing_env, make_tft_dataset, make_tft_loaders,
+    min_tft_rows,
 )
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -44,21 +45,23 @@ _fc_replay_buf  : Dict[str, ForecastingReplayBuffer] = {
 _task1_train_df: Optional[pd.DataFrame] = None
 
 
-def _make_lightning_trainer(cl_method: str, task_id: int) -> L.Trainer:
+def _make_lightning_trainer(cl_method: str, task_id: int, has_val_loader: bool = True) -> L.Trainer:
     hw  = CONFIG["hardware"]
     fc  = CONFIG["forecasting"]
     log_dir = str(Path(CONFIG["paths"]["logs"]) / "forecasting" / cl_method / f"task{task_id}")
 
-    callbacks = [
-        EarlyStopping(
-            monitor="val_loss",
-            min_delta=1e-4,
-            patience=fc["early_stop_patience"],
-            verbose=False,
-            mode="min",
-        ),
-        LearningRateMonitor(logging_interval="epoch"),
-    ]
+    callbacks = [LearningRateMonitor(logging_interval="epoch")]
+    if has_val_loader:
+        callbacks.insert(
+            0,
+            EarlyStopping(
+                monitor="val_loss",
+                min_delta=1e-4,
+                patience=fc["early_stop_patience"],
+                verbose=False,
+                mode="min",
+            ),
+        )
 
     return L.Trainer(
         max_epochs          = fc["max_epochs"],
@@ -89,7 +92,7 @@ def train_forecast_naive(task_id: int, train_loader, val_loader, train_ds, train
         model = build_cltft(train_ds, cl_method="naive")
         if CONFIG["hardware"].get("compile", False):
             model = torch.compile(model, mode=CONFIG["hardware"]["compile_mode"])
-    trainer = _make_lightning_trainer("naive", task_id)
+    trainer = _make_lightning_trainer("naive", task_id, has_val_loader=val_loader is not None)
     model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, train_loader, val_loader)
     _fc_model_state["naive"] = model
@@ -104,7 +107,7 @@ def train_forecast_ewc(task_id: int, train_loader, val_loader, train_ds, train_d
         if CONFIG["hardware"].get("compile", False):
             model = torch.compile(model, mode=CONFIG["hardware"]["compile_mode"])
 
-    trainer = _make_lightning_trainer("ewc", task_id)
+    trainer = _make_lightning_trainer("ewc", task_id, has_val_loader=val_loader is not None)
     model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, train_loader, val_loader)
 
@@ -160,7 +163,7 @@ def train_forecast_replay(task_id: int, train_loader, val_loader, train_ds, trai
     else:
         mixed_loader = train_loader
 
-    trainer = _make_lightning_trainer("replay", task_id)
+    trainer = _make_lightning_trainer("replay", task_id, has_val_loader=val_loader is not None)
     model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, mixed_loader, val_loader)
 
@@ -186,7 +189,7 @@ def train_forecast_sdft(task_id: int, train_loader, val_loader, train_ds, train_
         model.store_teacher()
         console.print(f"  [cyan]SDFT teacher updated from task {task_id - 1}[/cyan]")
 
-    trainer = _make_lightning_trainer("sdft", task_id)
+    trainer = _make_lightning_trainer("sdft", task_id, has_val_loader=val_loader is not None)
     model = _prepare_forecast_model_for_fit(model)
     trainer.fit(model, train_loader, val_loader)
 
@@ -474,11 +477,19 @@ def run_forecast_on_task(
 ) -> Dict[str, float]:
     """Build val loader for eval_task_df and run metrics."""
     global _task1_tft_df
-    if len(eval_task_df) < MIN_ROWS_NEEDED:
+    min_rows_needed = min_tft_rows()
+    if len(eval_task_df) < min_rows_needed:
         return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
     try:
         hw = CONFIG["hardware"]
         fc = CONFIG["forecasting"]
+        eval_task_df = filter_tft_eval_frame(
+            eval_task_df,
+            min_length=min_rows_needed,
+        )
+        if eval_task_df.empty:
+            return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
+
         loader_kwargs = dict(
             batch_size   = fc["batch_size"],
             num_workers  = hw["num_workers"],
