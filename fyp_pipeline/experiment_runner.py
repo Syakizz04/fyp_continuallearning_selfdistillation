@@ -756,12 +756,34 @@ METHOD_LABELS = {
 }
 TASK_NAMES = [t["name"].replace("_", "\n") for t in CONFIG["tasks"]]
 
-results_df = LOGGER.to_dataframe()
+def get_results_df() -> pd.DataFrame:
+    """Get latest metrics from memory, or from saved all_metrics.csv after reload."""
+    df = LOGGER.to_dataframe()
+
+    if df.empty:
+        csv_path = Path(CONFIG["paths"]["results"]) / "all_metrics.csv"
+        if csv_path.exists():
+            df = pd.read_csv(csv_path)
+
+    required = [
+        "model_type", "cl_method", "train_task_id", "eval_task_id",
+        "metric_name", "metric_value",
+    ]
+
+    if df.empty or any(col not in df.columns for col in required):
+        return pd.DataFrame(columns=required)
+
+    return df
 
 
 def plot_metric_over_tasks(model_type: str, metric: str, ylabel: str,
                            title: str, lower_better: bool = True,
                            filename: str = ""):
+    results_df = get_results_df()
+    if results_df.empty:
+        console.print(f"  [yellow]Skipped {title}: no metric records available[/yellow]")
+        return
+
     methods = CONFIG["cl_methods"][model_type]
     fig, ax = plt.subplots(figsize=(11, 5))
 
