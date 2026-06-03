@@ -465,45 +465,57 @@ RL_TRAINERS = {
 #               save_metrics_and_checkpoint(...)
 
 
-# ── Keep Task 1 training dataframe for MASE scaling ───────────────────────────
-_task1_tft_df: Optional[pd.DataFrame] = None
-
 # ── Helper: build and evaluate forecasting on a given task ───────────────────
+
+# Cache of (val_loader, filtered_eval_df) keyed by (id(eval_task_df), id(train_ds)).
+# Cross-task evaluation re-scores the same task frames repeatedly with the same
+# training dataset, so the TimeSeriesDataSet only needs to be built once. The
+# cache is cleared per cl_method in run_experiment to avoid id() reuse collisions.
+_eval_loader_cache: Dict[tuple, tuple] = {}
+
 
 def run_forecast_on_task(
     model      : CLTFT,
     eval_task_df: pd.DataFrame,
     train_ds   : TimeSeriesDataSet,
 ) -> Dict[str, float]:
-    """Build val loader for eval_task_df and run metrics."""
-    global _task1_tft_df
+    """Build (or reuse a cached) val loader for eval_task_df and run metrics."""
     min_rows_needed = min_tft_rows()
     if len(eval_task_df) < min_rows_needed:
         return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
     try:
-        hw = CONFIG["hardware"]
-        fc = CONFIG["forecasting"]
-        eval_task_df = filter_tft_eval_frame(
-            eval_task_df,
-            min_length=min_rows_needed,
-        )
-        if eval_task_df.empty:
-            return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
+        cache_key = (id(eval_task_df), id(train_ds))
+        cached    = _eval_loader_cache.get(cache_key)
+        if cached is None:
+            hw = CONFIG["hardware"]
+            fc = CONFIG["forecasting"]
+            filtered = filter_tft_eval_frame(
+                eval_task_df,
+                min_length=min_rows_needed,
+            )
+            if filtered.empty:
+                return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
 
-        loader_kwargs = dict(
-            batch_size   = fc["batch_size"],
-            num_workers  = hw["num_workers"],
-            pin_memory   = hw["pin_memory"],
-            persistent_workers = hw["persistent_workers"] if hw["num_workers"] > 0 else False,
-        )
-        eval_ds = make_tft_dataset(
-            eval_task_df,
-            train=False,
-            training_dataset=train_ds,
-        )
-        val_loader = eval_ds.to_dataloader(train=False, shuffle=False, **loader_kwargs)
-        mase_train_df = _task1_tft_df if _task1_tft_df is not None else eval_task_df
-        return evaluate_forecasting(model, val_loader, mase_train_df, task_id=0)
+            loader_kwargs = dict(
+                batch_size   = fc["batch_size"],
+                num_workers  = hw["num_workers"],
+                pin_memory   = hw["pin_memory"],
+                persistent_workers = hw["persistent_workers"] if hw["num_workers"] > 0 else False,
+            )
+            eval_ds = make_tft_dataset(
+                filtered,
+                train=False,
+                training_dataset=train_ds,
+            )
+            val_loader = eval_ds.to_dataloader(train=False, shuffle=False, **loader_kwargs)
+            cached = (val_loader, filtered)
+            _eval_loader_cache[cache_key] = cached
+
+        val_loader, filtered = cached
+        # MASE baseline = the evaluated task's own demand history (standard
+        # per-series scaling). Using a fixed Task-1 baseline for every task
+        # inflated MASE on the larger-scale mega-sale tasks.
+        return evaluate_forecasting(model, val_loader, filtered, task_id=0)
     except Exception as e:
         console.print(f"  [red]eval_forecast error: {e}[/red]")
         return {"mase": np.nan, "smape": np.nan, "rmse": np.nan}
@@ -512,8 +524,6 @@ def run_forecast_on_task(
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 def run_experiment(tft_tasks, rl_tasks):
-    global _task1_tft_df
-
     tasks       = CONFIG["tasks"]
     n_tasks     = len(tasks)
     model_types = CONFIG["model_types"]
@@ -548,6 +558,7 @@ def run_experiment(tft_tasks, rl_tasks):
 
             # ── Training & Evaluation Loop ─────────────────────────────────
             trained_tft_ds : Optional[TimeSeriesDataSet] = None   # for eval alignment
+            _eval_loader_cache.clear()  # fresh eval-loader cache per cl_method
 
             for task_idx, task in enumerate(tasks):
                 task_id   = task["task_id"]
@@ -561,9 +572,6 @@ def run_experiment(tft_tasks, rl_tasks):
                     # ───────────────────────────────────────────────────────
                     if model_type == "forecasting":
                         t_df = tft_tasks[task_idx]
-
-                        if _task1_tft_df is None:
-                            _task1_tft_df = t_df  # store for MASE scaling
 
                         train_ds, train_loader, val_loader = make_tft_loaders(t_df)
 
@@ -612,9 +620,37 @@ def run_experiment(tft_tasks, rl_tasks):
                             train_task_id = task_id,
                             eval_task_id  = eval_task_id,
                             metrics       = metrics,
+                            eval_phase    = "seen",
                         )
                         metric_str = "  ".join(f"{k}={v:.4f}" for k,v in metrics.items() if not np.isnan(v))
                         console.print(f"    Eval task {eval_task_id}: {metric_str}")
+
+                    # ───────────────────────────────────────────────────────
+                    # EVALUATE on FUTURE/UNSEEN TASKS (for FWT upper triangle)
+                    # ───────────────────────────────────────────────────────
+                    if task_idx + 1 < n_tasks:
+                        console.print(f"  Evaluating on {n_tasks - task_idx - 1} future task(s) for FWT...")
+                        for eval_idx in range(task_idx + 1, n_tasks):
+                            eval_task    = tasks[eval_idx]
+                            eval_task_id = eval_task["task_id"]
+
+                            if model_type == "forecasting":
+                                eval_df = tft_tasks[eval_idx]
+                                metrics = run_forecast_on_task(model, eval_df, trained_tft_ds)
+                            else:
+                                eval_df = rl_tasks[eval_idx]
+                                metrics = evaluate_rl(model, eval_df)
+
+                            LOGGER.log(
+                                model_type    = model_type,
+                                cl_method     = cl_method,
+                                train_task_id = task_id,
+                                eval_task_id  = eval_task_id,
+                                metrics       = metrics,
+                                eval_phase    = "future",
+                            )
+                            metric_str = "  ".join(f"{k}={v:.4f}" for k,v in metrics.items() if not np.isnan(v))
+                            console.print(f"    Future eval task {eval_task_id}: {metric_str}")
 
                     # ───────────────────────────────────────────────────────
                     # SAVE CHECKPOINT
@@ -632,7 +668,8 @@ def run_experiment(tft_tasks, rl_tasks):
                     traceback.print_exc()
                     continue
 
-    # ── Save all results ───────────────────────────────────────────────────────
+    # ── Derive profit_index, then save all results ──────────────────────────────
+    append_profit_index_metric("rl")
     LOGGER.save()
     total_time = time.time() - exp_start
     console.print(f"\n[bold green]═══ EXPERIMENT COMPLETE ({total_time/60:.1f} min) ═══[/bold green]")
@@ -643,6 +680,62 @@ def run_experiment(tft_tasks, rl_tasks):
 
 # ─── Cell: BWT / FWT Computation ─────────────────────────────────────────────
 
+def append_profit_index_metric(model_type: str = "rl",
+                               base_metric: str = "cumulative_profit") -> None:
+    """
+    Derive and log a normalized ``profit_index`` for the RL methods.
+
+        profit_index[i, j] = method_profit[i, j] / naive_profit[j, j]
+
+    The denominator is the *naive* CL method's profit on task j right after it
+    trained task j (the diagonal of naive's performance matrix) — a fixed
+    per-task reference. This keeps the numbers readable (~1.0) while preserving
+    forgetting structure: BWT on profit_index is just the raw BWT divided by a
+    positive per-task constant, and every method's forgetting (including naive's
+    own off-diagonal drop) stays visible. Logged as a metric so all downstream
+    tables / plots / BWT-FWT treat it uniformly. Idempotent across re-runs.
+    """
+    df = LOGGER.to_dataframe()
+    if df.empty:
+        return
+    sub = df[(df["model_type"] == model_type) & (df["metric_name"] == base_metric)]
+    if sub.empty:
+        return
+
+    # Drop any previously injected profit_index rows so re-runs don't duplicate.
+    LOGGER._records = [
+        r for r in LOGGER._records
+        if not (r["model_type"] == model_type and r["metric_name"] == "profit_index")
+    ]
+
+    # naive[j, j] — naive's fresh profit on each task (train_task == eval_task).
+    naive = sub[sub["cl_method"] == "naive"]
+    denom = {
+        int(r["eval_task_id"]): float(r["metric_value"])
+        for _, r in naive.iterrows()
+        if int(r["train_task_id"]) == int(r["eval_task_id"])
+    }
+    if not denom:
+        console.print("  [yellow]profit_index: no naive baseline found; skipping[/yellow]")
+        return
+
+    for _, r in sub.iterrows():
+        j = int(r["eval_task_id"])
+        d = denom.get(j)
+        if d is None or not np.isfinite(d) or abs(d) <= 1e-9:
+            val = np.nan
+        else:
+            val = float(r["metric_value"]) / d
+        LOGGER.log(
+            model_type    = r["model_type"],
+            cl_method     = r["cl_method"],
+            train_task_id = int(r["train_task_id"]),
+            eval_task_id  = j,
+            metrics       = {"profit_index": val},
+            eval_phase    = r.get("eval_phase", "seen"),
+        )
+
+
 def compute_all_cl_metrics() -> pd.DataFrame:
     """
     Compute BWT and FWT for every (model_type, cl_method) combination.
@@ -651,18 +744,28 @@ def compute_all_cl_metrics() -> pd.DataFrame:
     records = []
     df      = LOGGER.to_dataframe()
 
-    # Primary metric per model type (lower=better for forecast, higher=better for rl)
+    # Primary metric per model type (lower=better for forecast, higher=better for rl).
+    # RL uses profit_index (method profit / naive fresh per-task profit) so the
+    # summary/plots stay readable instead of raw multi-million-MYR cumulative profit.
     PRIMARY = {
-        "forecasting": ("mase",              False),  # (metric, higher_is_better)
-        "rl":          ("cumulative_profit",  True),
+        "forecasting": ("mase",          False),  # (metric, higher_is_better)
+        "rl":          ("profit_index",  True),
     }
 
     for model_type in CONFIG["model_types"]:
         metric_name, higher_better = PRIMARY[model_type]
+        # FWT baseline = the naive method's matrix, so EWC/replay/SDFT are scored
+        # for forward transfer against plain sequential fine-tuning (nonzero and
+        # meaningful even at 2 tasks), instead of a self-referential baseline.
+        fwt_baseline_mat = LOGGER.get_perf_matrix(model_type, "naive", metric_name)
 
         for cl_method in CONFIG["cl_methods"][model_type]:
             mat = LOGGER.get_perf_matrix(model_type, cl_method, metric_name)
-            bwt, fwt = compute_bwt_fwt(mat, primary_is_higher_better=higher_better)
+            bwt, fwt = compute_bwt_fwt(
+                mat,
+                primary_is_higher_better=higher_better,
+                fwt_baseline_matrix=fwt_baseline_mat,
+            )
 
             # Average performance on seen tasks at final task
             n_tasks     = len(CONFIG["tasks"])
@@ -695,9 +798,10 @@ def build_cl_summary() -> pd.DataFrame:
 # ─── Cell: Results Comparison Tables ─────────────────────────────────────────
 
 def make_comparison_table(model_type: str, metric: str) -> pd.DataFrame:
-    """Pivot table: CL methods × Tasks, showing metric value."""
+    """Pivot table: CL methods × Tasks, showing online (diagonal) performance."""
     df   = LOGGER.to_dataframe()
     sub  = df[(df["model_type"]==model_type) & (df["metric_name"]==metric)]
+    sub  = sub[sub["train_task_id"] == sub["eval_task_id"]]   # diagonal / online only
     if sub.empty:
         return pd.DataFrame()
     pivot = sub.pivot_table(
@@ -715,13 +819,15 @@ def print_and_save_comparison_tables(cl_summary: Optional[pd.DataFrame] = None) 
     tables = {
         "forecast_mase": make_comparison_table("forecasting", "mase"),
         "forecast_smape": make_comparison_table("forecasting", "smape"),
+        "rl_profit_index": make_comparison_table("rl", "profit_index"),
         "rl_profit": make_comparison_table("rl", "cumulative_profit"),
         "rl_regret": make_comparison_table("rl", "pricing_regret"),
     }
     labels = {
         "forecast_mase": "FORECASTING - MASE (lower is better)",
         "forecast_smape": "FORECASTING - sMAPE",
-        "rl_profit": "RL - CUMULATIVE PROFIT (higher is better)",
+        "rl_profit_index": "RL - PROFIT INDEX (vs naive fresh per-task, higher is better)",
+        "rl_profit": "RL - CUMULATIVE PROFIT (raw MYR, reference)",
         "rl_regret": "RL - PRICING REGRET (lower is better)",
     }
     for name, table in tables.items():
@@ -765,12 +871,13 @@ def plot_metric_over_tasks(model_type: str, metric: str, ylabel: str,
     methods = CONFIG["cl_methods"][model_type]
     fig, ax = plt.subplots(figsize=(11, 5))
 
+    df = LOGGER.to_dataframe()   # read fresh; the module-level snapshot is stale
     for method in methods:
-        sub = results_df[
-            (results_df["model_type"] == model_type) &
-            (results_df["cl_method"]  == method) &
-            (results_df["metric_name"]== metric) &
-            (results_df["train_task_id"] == results_df["eval_task_id"])   # diagonal only
+        sub = df[
+            (df["model_type"] == model_type) &
+            (df["cl_method"]  == method) &
+            (df["metric_name"]== metric) &
+            (df["train_task_id"] == df["eval_task_id"])   # diagonal only
         ].sort_values("eval_task_id")
 
         if sub.empty: continue
@@ -927,9 +1034,9 @@ def generate_all_plots(cl_summary: Optional[pd.DataFrame] = None) -> pd.DataFram
     plot_metric_over_tasks("forecasting", "mase", "MASE", "Forecasting MASE per Task (down is better)", True, "mase_online")
     plot_metric_over_tasks("forecasting", "smape", "sMAPE (%)", "Forecasting sMAPE per Task", True, "smape_online")
     plot_performance_matrix("forecasting", "mase", "Forecasting MASE", lower_better=True)
-    plot_metric_over_tasks("rl", "cumulative_profit", "Cumulative Profit (MYR)", "RL Cumulative Profit per Task (up is better)", False, "profit_online")
+    plot_metric_over_tasks("rl", "profit_index", "Profit Index (vs naive fresh)", "RL Profit Index per Task (up is better)", False, "profit_index_online")
     plot_metric_over_tasks("rl", "pricing_regret", "Pricing Regret", "RL Pricing Regret per Task (down is better)", True, "regret_online")
-    plot_performance_matrix("rl", "cumulative_profit", "RL Cumulative Profit", lower_better=False)
+    plot_performance_matrix("rl", "profit_index", "RL Profit Index", lower_better=False)
     plot_bwt_fwt_bar(cl_summary)
     plot_final_summary_table(cl_summary)
     console.print("[bold green]All plots saved to plots/[/bold green]")

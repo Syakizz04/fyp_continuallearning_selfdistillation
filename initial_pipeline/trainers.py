@@ -237,6 +237,9 @@ class CLTFT(TemporalFusionTransformer):
         # EWC state
         self.ewc_fisher  : Dict[str, torch.Tensor] = {}
         self.ewc_optparams: Dict[str, torch.Tensor] = {}
+        # Device-resident copies of Fisher/opt-params, built lazily in _ewc_loss
+        # and reused across steps; invalidated whenever Fisher is recomputed.
+        self._ewc_dev_cache = None
 
         # SDFT teacher (frozen copy of previous model)
         self.teacher     : Optional["CLTFT"] = None
@@ -292,21 +295,37 @@ class CLTFT(TemporalFusionTransformer):
             step_output = self._add_auxiliary_loss(step_output, ewc_penalty)
 
         elif self.cl_method == "sdft" and self.teacher is not None:
-            sdft_penalty = self._sdft_loss(batch)
-            self.log("sdft_penalty", sdft_penalty.detach(), prog_bar=False, on_step=True)
-            step_output = self._add_auxiliary_loss(step_output, sdft_penalty)
+            alpha   = self.cl_cfg["sdft_alpha"]
+            distill = self._sdft_loss(batch)
+            self.log("sdft_penalty", distill.detach(), prog_bar=False, on_step=True)
+            # Convex blend: alpha * task_loss + (1 - alpha) * distillation.
+            # The task loss must actually be scaled by alpha — super() returns it
+            # unweighted, so this is where the SDFT trade-off is really applied.
+            if isinstance(step_output, dict):
+                step_output = dict(step_output)
+                step_output["loss"] = alpha * step_output["loss"] + (1.0 - alpha) * distill
+            else:
+                step_output = alpha * step_output + (1.0 - alpha) * distill
 
         return step_output
 
     # ── EWC penalty ────────────────────────────────────────────────────────
     def _ewc_loss(self) -> torch.Tensor:
+        lam = self.cl_cfg["ewc_lambda"]
+        # Fisher/opt-params are stored on CPU (for cross-task accumulation and
+        # checkpointing). Move them to the compute device ONCE and cache, instead
+        # of re-transferring the whole model's tensors on every training step.
+        if self._ewc_dev_cache is None:
+            self._ewc_dev_cache = (
+                {n: f.to(self.device) for n, f in self.ewc_fisher.items()},
+                {n: p.to(self.device) for n, p in self.ewc_optparams.items()},
+            )
+        fisher_dev, opt_dev = self._ewc_dev_cache
+
         penalty = torch.tensor(0.0, device=self.device)
-        lam     = self.cl_cfg["ewc_lambda"]
         for name, param in self.named_parameters():
-            if name in self.ewc_fisher:
-                fisher   = self.ewc_fisher[name].to(self.device)
-                opt_p    = self.ewc_optparams[name].to(self.device)
-                penalty += (fisher * (param - opt_p).pow(2)).sum()
+            if name in fisher_dev:
+                penalty += (fisher_dev[name] * (param - opt_dev[name]).pow(2)).sum()
         return (lam / 2.0) * penalty
 
     def compute_and_store_fisher(self, dataloader, n_batches: int = 200):
@@ -360,14 +379,18 @@ class CLTFT(TemporalFusionTransformer):
             n: p.detach().cpu().clone()
             for n, p in self.named_parameters() if p.requires_grad
         }
+        # Fisher/opt-params changed → drop the device cache so _ewc_loss rebuilds it.
+        self._ewc_dev_cache = None
         self.train()
         console.print(f"  [cyan]Fisher computed over {count} batches[/cyan]")
 
-    # ── SDFT: soft regression distillation loss ────────────────────────────
+    # ── SDFT: self-distillation loss ───────────────────────────────────────
     def _sdft_loss(self, batch) -> torch.Tensor:
-        alpha  = self.cl_cfg["sdft_alpha"]
-        T      = self.cl_cfg["sdft_temperature"]
-
+        """Raw self-distillation term: MSE between student and frozen-teacher
+        predictions. No temperature — for MSE regression a temperature is just a
+        constant rescaling (MSE(a/T, b/T) = MSE(a, b)/T^2) and changes nothing.
+        No alpha here either; the convex blend is applied by the caller in
+        training_step so the task loss is genuinely weighted by alpha."""
         x, y = batch
         x_dev = self._move_to_device(x)
 
@@ -380,9 +403,7 @@ class CLTFT(TemporalFusionTransformer):
         s_out  = self(x_dev)
         s_pred = self._prediction_from_output(s_out)
 
-        # Soft MSE distillation (scaled by temperature)
-        sdft_loss = F.mse_loss(s_pred / T, t_pred.detach() / T)
-        return (1.0 - alpha) * sdft_loss  # alpha already in main loss from super()
+        return F.mse_loss(s_pred, t_pred.detach())
 
     def store_teacher(self):
         """Store a frozen deep copy of self as the teacher for next task."""
@@ -427,18 +448,17 @@ class DynamicPricingEnv(gym.Env):
          is_ramadan, is_pre_raya_window, is_pre_cny_window,
          viral_shock_active, any_shock_active, elasticity_norm]
 
-    Action (Discrete 5):
-        0: -10%  1: -5%  2: 0%  3: +5%  4: +10%
-        Applied to base_price to set current_price.
+    Action (Discrete 11):
+        Price adjustment tiers from -10% to +10% in 2% increments.
+        Applied to base_price to set the simulated price.
 
     Reward:
-        profit_margin_myr (clipped to [-1000, 5000]) / 1000
-        Penalised by 0.15 * revenue if stockout occurs.
+        Computed online from simulated profit margin and penalised by
+        0.15 * revenue if stockout occurs, then scaled by 1/1000.
     """
 
     metadata = {"render_modes": []}
 
-    PRICE_TIERS = [-0.10, -0.05, 0.0, +0.05, +0.10]
     STATE_DIM   = 13
 
     def __init__(self, task_df: pd.DataFrame, seed: int = SEED):
@@ -446,12 +466,13 @@ class DynamicPricingEnv(gym.Env):
         self.df      = task_df.reset_index(drop=True)
         self.n_steps = len(self.df)
         self._seed   = seed
+        self.price_tiers = list(CONFIG["rl"]["price_tiers"])
 
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
             shape=(self.STATE_DIM,), dtype=np.float32,
         )
-        self.action_space = spaces.Discrete(len(self.PRICE_TIERS))
+        self.action_space = spaces.Discrete(len(self.price_tiers))
 
         # Precompute needed columns
         self._precompute()
@@ -486,6 +507,18 @@ class DynamicPricingEnv(gym.Env):
         self._unit_cost       = df.get("base_price",      pd.Series(50)).values.astype(np.float32) * 0.55
         self._stockout        = df.get("stockout_flag",   pd.Series(0)).values.astype(np.float32)
 
+        # Oracle best reward per step, precomputed once and vectorized over price
+        # tiers. The oracle depends only on the data (not the policy), so there is
+        # no need to recompute it per step/episode during evaluation.
+        tiers   = np.asarray(self.price_tiers, dtype=np.float32)            # (T,)
+        base_p  = np.maximum(self._base_price, 1e-6)[:, None]               # (N,1)
+        price   = self._base_price[:, None] * (1.0 + tiers)[None, :]        # (N,T)
+        ratio   = price / base_p                                           # (N,T)
+        demand  = np.maximum(self._realized_demand, 0.0)[:, None]          # (N,1)
+        adj     = demand * np.power(ratio, self._elasticity[:, None])      # (N,T)
+        profit  = (price - self._unit_cost[:, None]) * np.maximum(0.0, adj)  # (N,T)
+        self._opt_reward = (profit.max(axis=1) / 1000.0).astype(np.float32)  # (N,)
+
     def _get_obs(self, idx: int) -> np.ndarray:
         return np.array([
             self._demand_forecast[idx],
@@ -510,7 +543,7 @@ class DynamicPricingEnv(gym.Env):
 
     def step(self, action: int):
         idx   = self.current_step
-        tier  = self.PRICE_TIERS[int(action)]
+        tier  = self.price_tiers[int(action)]
         price = float(self._base_price[idx]) * (1.0 + tier)
         cost  = float(self._unit_cost[idx])
 
@@ -545,19 +578,9 @@ class DynamicPricingEnv(gym.Env):
         return obs, reward, done, False, info
 
     def optimal_reward(self, idx: int) -> float:
-        """Compute oracle best reward at step idx (exhaustive over tiers)."""
-        best = -np.inf
-        for tier in self.PRICE_TIERS:
-            price = float(self._base_price[idx]) * (1.0 + tier)
-            cost  = float(self._unit_cost[idx])
-            demand = max(float(self._realized_demand[idx]), 0)
-            e     = float(self._elasticity[idx])
-            base_p = float(self._base_price[idx])
-            adj   = demand * ((price / max(base_p, 1e-6)) ** e)
-            profit = (price - cost) * max(0.0, adj)
-            if profit > best:
-                best = profit
-        return float(best) / 1000.0
+        """Oracle best reward at step idx — O(1) lookup into the precomputed
+        per-step array (see _precompute)."""
+        return float(self._opt_reward[idx])
 
 
 def make_pricing_env(task_df: pd.DataFrame) -> DummyVecEnv:
@@ -686,46 +709,40 @@ def evaluate_forecasting(
 def evaluate_rl(
     model: PPO,
     task_df: pd.DataFrame,
-    n_episodes: int = None,
+    n_episodes: int = None,   # accepted for API compatibility; see note below
 ) -> Dict[str, float]:
     """
     Run the PPO agent on task_df and compute pricing metrics.
+
+    DynamicPricingEnv is fully deterministic (no randomness in reset/step) and we
+    evaluate with a deterministic policy, so every episode over a given task is
+    byte-for-byte identical. We therefore run exactly one pass and ignore
+    n_episodes — running N would only multiply cumulative_profit by N (an
+    artifact) while leaving the per-step reward/regret means unchanged.
     """
-    n_episodes = n_episodes or CONFIG["rl"]["eval_episodes"]
     env = DynamicPricingEnv(task_df)
 
-    episode_rewards, episode_profits = [], []
+    obs, _ = env.reset()
+    ep_reward, ep_profit = 0.0, 0.0
     total_regret = 0.0
     total_steps  = 0
+    done = False
 
-    for ep in range(n_episodes):
-        obs, _ = env.reset()
-        ep_reward, ep_profit = 0.0, 0.0
-        done = False
+    while not done:
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, _, info = env.step(int(action))
+        ep_reward += reward
+        ep_profit += info.get("profit_margin", 0.0)
 
-        while not done:
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, _, info = env.step(int(action))
-            ep_reward  += reward
-            ep_profit  += info.get("profit_margin", 0.0)
-
-            # Regret: oracle - actual (both in raw MYR)
-            oracle = env.optimal_reward(min(env.current_step - 1, env.n_steps - 1))
-            regret = max(0.0, oracle - reward)
-            total_regret += regret
-            total_steps  += 1
-
-        episode_rewards.append(ep_reward)
-        episode_profits.append(ep_profit)
-
-    avg_reward  = float(np.mean(episode_rewards))
-    cum_profit  = float(np.sum(episode_profits))
-    avg_regret  = float(total_regret / max(total_steps, 1))
+        # Regret: oracle - actual (both in raw MYR)
+        oracle = env.optimal_reward(min(env.current_step - 1, env.n_steps - 1))
+        total_regret += max(0.0, oracle - reward)
+        total_steps  += 1
 
     return {
-        "avg_episode_reward": avg_reward,
-        "cumulative_profit" : cum_profit,
-        "pricing_regret"    : avg_regret,
+        "avg_episode_reward": float(ep_reward),
+        "cumulative_profit" : float(ep_profit),
+        "pricing_regret"    : float(total_regret / max(total_steps, 1)),
     }
 
 
@@ -734,16 +751,22 @@ def evaluate_rl(
 def compute_bwt_fwt(
     perf_matrix: np.ndarray,
     primary_is_higher_better: bool = True,
+    fwt_baseline_matrix: Optional[np.ndarray] = None,
 ) -> Tuple[float, float]:
     """
     Compute Backward Transfer (BWT) and Forward Transfer (FWT).
 
     perf_matrix[i, j] = performance on task j evaluated after training on task i.
-    Shape: (n_tasks, n_tasks). Upper-triangle is -inf (task not seen yet).
+    Shape: (n_tasks, n_tasks). The upper triangle is filled by evaluating the
+    current model on future/unseen tasks before those tasks are trained.
 
     BWT = (1/(T-1)) * sum_{i=1}^{T-1} (R_{T,i} - R_{i,i})
     FWT = (1/(T-1)) * sum_{i=2}^{T}   (R_{i-1,i} - b_i)
-          where b_i = perf_matrix[0, i] (naive baseline = Task-1 model on task i)
+          where b_i comes from fwt_baseline_matrix at the same train/eval point.
+          The runner passes the naive method's matrix, so RECALL/EWC/SDFT are
+          compared against plain sequential fine-tuning. If no baseline matrix is
+          given it falls back to perf_matrix (self-referential — the first FWT
+          term is then always 0; needs >= 3 tasks to be meaningful).
     """
     T = perf_matrix.shape[0]
     if T < 2:
@@ -759,11 +782,12 @@ def compute_bwt_fwt(
             bwt_vals.append(diff if primary_is_higher_better else -diff)
     bwt = float(np.mean(bwt_vals)) if bwt_vals else 0.0
 
-    # FWT: does past learning help on new tasks?
+    # FWT: does past learning help on new tasks (vs the baseline method)?
+    baseline_matrix = fwt_baseline_matrix if fwt_baseline_matrix is not None else perf_matrix
     fwt_vals = []
     for i in range(1, T):
         r_transfer = perf_matrix[i - 1, i]
-        r_baseline = perf_matrix[0, i]          # naive CL result used as baseline
+        r_baseline = baseline_matrix[i - 1, i]
         if not (np.isnan(r_transfer) or np.isnan(r_baseline)):
             diff = r_transfer - r_baseline
             fwt_vals.append(diff if primary_is_higher_better else -diff)
@@ -994,6 +1018,7 @@ class ResultsLogger:
         train_task_id: int,
         eval_task_id : int,
         metrics      : Dict[str, float],
+        eval_phase   : str = "seen",
     ):
         ts = datetime.now().isoformat(timespec="seconds")
         for metric_name, value in metrics.items():
@@ -1002,6 +1027,7 @@ class ResultsLogger:
                 "cl_method"     : cl_method,
                 "train_task_id" : train_task_id,
                 "eval_task_id"  : eval_task_id,
+                "eval_phase"    : eval_phase,
                 "metric_name"   : metric_name,
                 "metric_value"  : value,
                 "timestamp"     : ts,
@@ -1031,7 +1057,12 @@ class ResultsLogger:
             (df["cl_method"]  == cl_method)  &
             (df["metric_name"]== metric_name)
         ]
-        n   = self._n_tasks
+        # Re-read the task count at call time — do NOT use the import-time
+        # snapshot. Smoke tests / custom configs mutate CONFIG["tasks"] after
+        # import; a stale n leaves the final row all-NaN and collapses BWT/FWT
+        # to 0 (compute_bwt_fwt sizes T from this matrix's shape).
+        n   = len(CONFIG["tasks"])
+        self._n_tasks = n
         mat = np.full((n, n), np.nan)
         for _, row in sub.iterrows():
             i = int(row["train_task_id"]) - 1

@@ -123,9 +123,13 @@ CONFIG = {
         "max_grad_norm"         : 0.5,
         "total_timesteps_per_task": 50_000,
         "eval_episodes"         : 10,
-        # Action space: 5 discrete price tiers
-        "price_tiers"           : [-0.10, -0.05, 0.0, +0.05, +0.10],
-        "n_actions"             : 5,
+        # Action space: 11 discrete price tiers from -10% to +10%.
+        "price_tiers"           : [
+            -0.10, -0.08, -0.06, -0.04, -0.02,
+             0.00,
+             0.02,  0.04,  0.06,  0.08,  0.10,
+        ],
+        "n_actions"             : 11,
         # State feature dimension (computed below)
         "policy"                : "MlpPolicy",
         "net_arch"              : [256, 256],
@@ -143,8 +147,7 @@ CONFIG = {
         "recall_buffer_capacity": 20_000, # transitions per task
         "recall_mix_n_steps"    : 512,   # past transitions per PPO update
         # SDFT (Forecasting)
-        "sdft_alpha"            : 0.50,  # blend: 0=pure distill, 1=pure task
-        "sdft_temperature"      : 2.0,
+        "sdft_alpha"            : 0.50,  # convex blend: alpha*task + (1-alpha)*distill
         # SDFT (RL)
         "sdft_kl_coef"          : 0.10,  # KL penalty coefficient
     },
@@ -174,6 +177,59 @@ CONFIG = {
     },
 }
 
+def demand_required_columns() -> List[str]:
+    """Columns required by the TFT forecasting pipeline."""
+    fc = CONFIG["forecasting"]
+    required = (
+        ["date"]
+        + fc["group_ids"]
+        + fc["static_categoricals"]
+        + [fc["target"]]
+        + [c for c in fc["known_reals"] if c != "time_idx"]
+    )
+    return list(dict.fromkeys(required))
+
+
+RL_REQUIRED_COLUMNS = [
+    "date",
+    "product_id",
+    "region_id",
+    "day_of_week",
+    "month",
+    "is_weekend",
+    "is_mega_sale",
+    "is_ramadan",
+    "is_pre_raya_window",
+    "is_pre_cny_window",
+    "viral_shock_active",
+    "any_shock_active",
+    "elasticity_coefficient",
+    "demand_forecast",
+    "inventory_level",
+    "competitor_price",
+    "base_price",
+    "realized_demand",
+    "stockout_flag",
+]
+
+
+def select_required_columns(df: pd.DataFrame, required: List[str], dataset_name: str) -> pd.DataFrame:
+    """Keep only columns used by the training/evaluation pipeline."""
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError(f"{dataset_name} dataset is missing required columns: {missing}")
+
+    dropped = [col for col in df.columns if col not in required]
+    if dropped:
+        preview = ", ".join(dropped[:8])
+        suffix = "..." if len(dropped) > 8 else ""
+        console.print(
+            f"  [dim]{dataset_name}: ignoring {len(dropped)} unused column(s): "
+            f"{preview}{suffix}[/dim]"
+        )
+
+    return df.loc[:, required].copy()
+
 # ── Create output directories ─────────────────────────────────────────────────
 for key, path in CONFIG["paths"].items():
     if key != "demand_csv" and key != "rl_csv":
@@ -194,30 +250,19 @@ def load_and_clean(demand_path: str, rl_path: str) -> Tuple[pd.DataFrame, pd.Dat
     demand_df = pd.read_csv(demand_path, parse_dates=["date"])
     rl_df     = pd.read_csv(rl_path,     parse_dates=["date"])
 
+    demand_df = select_required_columns(demand_df, demand_required_columns(), "Demand")
+    rl_df = select_required_columns(rl_df, RL_REQUIRED_COLUMNS, "RL")
+
     console.print(f"  Demand CSV  : {len(demand_df):,} rows × {demand_df.shape[1]} cols")
     console.print(f"  RL CSV      : {len(rl_df):,} rows × {rl_df.shape[1]} cols")
 
     # ── Clean demand_df ────────────────────────────────────────────────────
     demand_df = demand_df.sort_values(["product_id", "region_id", "date"])
 
-    # Drop pure ground-truth component columns (keep only observed features)
-    gt_cols = [
-        "trend_component", "seasonal_annual", "seasonal_weekly",
-        "payday_multiplier", "ramadan_multiplier", "raya_multiplier",
-        "cny_multiplier", "mega_sale_multiplier", "viral_shock_multiplier",
-        "holiday_multiplier", "noise_factor", "demand_before_noise",
-        "effective_multiplier",
-    ]
-    demand_df = demand_df.drop(columns=[c for c in gt_cols if c in demand_df.columns])
-
     # Encode categoricals
     for col in ["product_id", "region_id", "product_category"]:
         if demand_df[col].dtype == object:
             demand_df[col] = demand_df[col].astype("category")
-
-    # Fill lag NaNs at series boundaries with 0 (early timesteps)
-    lag_cols = [c for c in demand_df.columns if "lag" in c or "rolling" in c]
-    demand_df[lag_cols] = demand_df[lag_cols].fillna(0)
 
     # Fill remaining NaN with 0
     num_cols = demand_df.select_dtypes(include=[np.number]).columns
@@ -260,10 +305,6 @@ def build_tft_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # Clip demand to [0, inf)
     df["demand"] = df["demand"].clip(lower=0).astype(float)
 
-    # shock_type as categorical (needed for static/dynamic encoding)
-    if "shock_type" in df.columns:
-        df["shock_type"] = df["shock_type"].astype(str)
-
     return df.reset_index(drop=True)
 
 
@@ -274,21 +315,16 @@ def build_rl_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
 
-    # Normalise continuous state features to [0, 1] or standard scale
-    price_cols = ["current_price", "base_price", "competitor_price",
-                  "price_lag_1", "price_gap", "price_change"]
-    for col in price_cols:
-        if col in df.columns:
-            max_val = df[col].abs().max()
-            if max_val > 0:
-                df[f"{col}_norm"] = df[col] / max_val
+    # Normalise only the columns consumed by DynamicPricingEnv observations.
+    max_competitor_price = df["competitor_price"].abs().max()
+    if max_competitor_price > 0:
+        df["competitor_price_norm"] = df["competitor_price"] / max_competitor_price
 
-    demand_max = df["demand_forecast"].max() if "demand_forecast" in df.columns else 1
+    demand_max = df["demand_forecast"].max()
     if demand_max > 0:
         df["demand_forecast_norm"] = df["demand_forecast"] / demand_max
-    if "inventory_level" in df.columns:
-        inv_max = df["inventory_level"].max()
-        df["inventory_norm"] = df["inventory_level"] / max(inv_max, 1)
+    inv_max = df["inventory_level"].max()
+    df["inventory_norm"] = df["inventory_level"] / max(inv_max, 1)
 
     return df
 
