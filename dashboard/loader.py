@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
-INITIAL_DIR = ROOT / "outputs" / "results"
+INITIAL_DIR = ROOT / "outputs" / "initial_local" / "results"
 DRIFT_DIR = ROOT / "outputs" / "drift" / "results"
 
 DROP_ARMS = {"periodic"}
