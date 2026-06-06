@@ -1,0 +1,140 @@
+{
+  "accuracy": [
+    {
+      "arm": "frozen",
+      "n_checks": 157,
+      "walk_mase_mean": 1.4744602735295542,
+      "walk_mase_median": 1.4710502158431131,
+      "walk_smape_mean": 155.68087989357628,
+      "walk_profit_mean": 3858.201627715293,
+      "n_fc_drift_checks": 16,
+      "n_rl_drift_checks": 9,
+      "profit_index_vs_frozen": 1.0
+    },
+    {
+      "arm": "ewc",
+      "n_checks": 157,
+      "walk_mase_mean": 1.418238965014272,
+      "walk_mase_median": 1.4292353525196535,
+      "walk_smape_mean": 155.97548363315073,
+      "walk_profit_mean": 3986.3588110744595,
+      "n_fc_drift_checks": 4,
+      "n_rl_drift_checks": 7,
+      "profit_index_vs_frozen": 1.0358424556934902
+    },
+    {
+      "arm": "replay",
+      "n_checks": 157,
+      "walk_mase_mean": 1.0222073894571728,
+      "walk_mase_median": 0.8645507559684972,
+      "walk_smape_mean": 148.04123252820057,
+      "walk_profit_mean": 3819.853169039709,
+      "n_fc_drift_checks": 1,
+      "n_rl_drift_checks": 8,
+      "profit_index_vs_frozen": 0.9921221360209282
+    },
+    {
+      "arm": "sdft",
+      "n_checks": 157,
+      "walk_mase_mean": 1.0744326936445876,
+      "walk_mase_median": 0.9321528278095632,
+      "walk_smape_mean": 148.75551363465132,
+      "walk_profit_mean": 3884.3887847841193,
+      "n_fc_drift_checks": 1,
+      "n_rl_drift_checks": 10,
+      "profit_index_vs_frozen": 1.0102913086034586
+    }
+  ],
+  "forgetting": [
+    {
+      "arm": "frozen",
+      "forgetting_mase_base_era": 0.0,
+      "adaptation_mase_walk_era": 0.0,
+      "forgetting_profit_base_era": 0.0,
+      "probe_mase_base_mean": 0.8604137626916591,
+      "probe_mase_walk_mean": 1.4944619132040788,
+      "n_base_probes": 7,
+      "n_walk_probes": 12
+    },
+    {
+      "arm": "ewc",
+      "forgetting_mase_base_era": -0.020659796354674503,
+      "adaptation_mase_walk_era": 0.11392526923529266,
+      "forgetting_profit_base_era": -0.0266405121733641,
+      "probe_mase_base_mean": 0.8397539663369846,
+      "probe_mase_walk_mean": 1.380536643968786,
+      "n_base_probes": 7,
+      "n_walk_probes": 12
+    },
+    {
+      "arm": "replay",
+      "forgetting_mase_base_era": -0.10569539155441103,
+      "adaptation_mase_walk_era": 0.6889970331139121,
+      "forgetting_profit_base_era": 0.0474210482526488,
+      "probe_mase_base_mean": 0.7547183711372482,
+      "probe_mase_walk_mean": 0.8054648800901667,
+      "n_base_probes": 7,
+      "n_walk_probes": 12
+    },
+    {
+      "arm": "sdft",
+      "forgetting_mase_base_era": 0.06047018882732612,
+      "adaptation_mase_walk_era": 0.622542992453477,
+      "forgetting_profit_base_era": 0.02598104156578182,
+      "probe_mase_base_mean": 0.9208839515189852,
+      "probe_mase_walk_mean": 0.8719189207506016,
+      "n_base_probes": 7,
+      "n_walk_probes": 12
+    }
+  ],
+  "efficiency": [
+    {
+      "arm": "frozen",
+      "n_fc_retrains": 0,
+      "n_rl_retrains": 0,
+      "n_retrains_total": 0,
+      "fc_epochs_total": 0,
+      "rl_steps_total": 0,
+      "walk_mase_mean": 1.4744602735295542,
+      "profit_index_vs_frozen": 1.0,
+      "forgetting_mase_base_era": 0.0,
+      "adaptation_mase_walk_era": 0.0
+    },
+    {
+      "arm": "ewc",
+      "n_fc_retrains": 4,
+      "n_rl_retrains": 7,
+      "n_retrains_total": 11,
+      "fc_epochs_total": 20,
+      "rl_steps_total": 105000,
+      "walk_mase_mean": 1.418238965014272,
+      "profit_index_vs_frozen": 1.0358424556934902,
+      "forgetting_mase_base_era": -0.020659796354674503,
+      "adaptation_mase_walk_era": 0.11392526923529266
+    },
+    {
+      "arm": "replay",
+      "n_fc_retrains": 1,
+      "n_rl_retrains": 8,
+      "n_retrains_total": 9,
+      "fc_epochs_total": 5,
+      "rl_steps_total": 120000,
+      "walk_mase_mean": 1.0222073894571728,
+      "profit_index_vs_frozen": 0.9921221360209282,
+      "forgetting_mase_base_era": -0.10569539155441103,
+      "adaptation_mase_walk_era": 0.6889970331139121
+    },
+    {
+      "arm": "sdft",
+      "n_fc_retrains": 1,
+      "n_rl_retrains": 10,
+      "n_retrains_total": 11,
+      "fc_epochs_total": 5,
+      "rl_steps_total": 150000,
+      "walk_mase_mean": 1.0744326936445876,
+      "profit_index_vs_frozen": 1.0102913086034586,
+      "forgetting_mase_base_era": 0.06047018882732612,
+      "adaptation_mase_walk_era": 0.622542992453477
+    }
+  ]
+}

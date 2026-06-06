@@ -1,0 +1,61 @@
+{
+  "arm": "replay",
+  "n_fc_triggers": 1,
+  "n_rl_triggers": 8,
+  "events": [
+    {
+      "date": "2013-09-24",
+      "kind": "rl",
+      "profit_index": 0.959880872880596,
+      "floor": 1.0
+    },
+    {
+      "date": "2013-11-05",
+      "kind": "rl",
+      "profit_index": 0.937367287675002,
+      "floor": 1.0
+    },
+    {
+      "date": "2013-12-10",
+      "kind": "forecasting",
+      "mase": 1.6273105090942757,
+      "threshold": 1.55970855692829
+    },
+    {
+      "date": "2013-12-24",
+      "kind": "rl",
+      "profit_index": 0.9966807795919296,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-01-14",
+      "kind": "rl",
+      "profit_index": 0.724435505739418,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-01-28",
+      "kind": "rl",
+      "profit_index": 0.9106741706545378,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-02-11",
+      "kind": "rl",
+      "profit_index": 0.8706558411767256,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-02-25",
+      "kind": "rl",
+      "profit_index": 0.9934701791773386,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-03-25",
+      "kind": "rl",
+      "profit_index": 0.9778723797708674,
+      "floor": 1.0
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "arm": "ewc",
+  "n_fc_triggers": 4,
+  "n_rl_triggers": 7,
+  "events": [
+    {
+      "date": "2013-09-24",
+      "kind": "rl",
+      "profit_index": 0.959880872880596,
+      "floor": 1.0
+    },
+    {
+      "date": "2013-11-26",
+      "kind": "rl",
+      "profit_index": 0.9845066783400567,
+      "floor": 1.0
+    },
+    {
+      "date": "2013-12-10",
+      "kind": "forecasting",
+      "mase": 1.6273105090942757,
+      "threshold": 1.55970855692829
+    },
+    {
+      "date": "2013-12-24",
+      "kind": "rl",
+      "profit_index": 0.9860324302413496,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-01-14",
+      "kind": "rl",
+      "profit_index": 0.8106189588049866,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-01-28",
+      "kind": "rl",
+      "profit_index": 0.923731916418749,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-02-11",
+      "kind": "rl",
+      "profit_index": 0.9534032404207993,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-02-25",
+      "kind": "rl",
+      "profit_index": 0.9829002891859094,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-12-09",
+      "kind": "forecasting",
+      "mase": 1.617755957584721,
+      "threshold": 1.55970855692829
+    },
+    {
+      "date": "2015-12-15",
+      "kind": "forecasting",
+      "mase": 1.6144880591913395,
+      "threshold": 1.55970855692829
+    },
+    {
+      "date": "2015-12-29",
+      "kind": "forecasting",
+      "mase": 1.5620380373513816,
+      "threshold": 1.55970855692829
+    }
+  ]
+}

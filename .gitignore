@@ -7,3 +7,6 @@ outputs/
 dataset_generator/synthetic_data/output/
 
 .ipynb_checkpoints/
+
+__pycache__/
+*.pyc

@@ -1,17 +1,7 @@
-numpy<2.0
+# Slim requirements for the viewer-only dashboard (Streamlit Community Cloud).
+# This branch (dashboard-deploy) deploys dashboard/app.py, which reads result CSVs
+# only — no torch / training stack. The full training requirements live on `main`.
+streamlit>=1.58
+plotly>=6.0
 pandas<2.2
-PyYAML
-matplotlib
-seaborn
-plotly
-rich
-scikit-learn<1.5
-torch>=2.1,<2.4
-lightning==2.6.1
-pytorch-forecasting>=1.1,<1.8
-darts
-gymnasium
-stable-baselines3[extra]
-optuna>=3.4,<5.0
-tensorboard
-avalanche-lib
+numpy<2.0
