@@ -19,6 +19,11 @@ def _heatmap(method: str, metric: str) -> go.Figure:
     if m.empty:
         return T.style(fig, height=520)
     z = m.values.astype(float)
+    # Hide future tasks: a model trained up to task r has not seen eval task c > r,
+    # so mask the upper triangle (forward-transfer cells) and keep diagonal + retention.
+    rows = np.array(m.index).reshape(-1, 1)
+    cols = np.array(m.columns).reshape(1, -1)
+    z = np.where(cols > rows, np.nan, z)
     text = np.where(np.isnan(z), "", np.vectorize(lambda v: f"{v:.2f}")(z))
     fig.add_trace(go.Heatmap(
         z=z,

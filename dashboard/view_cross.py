@@ -63,7 +63,10 @@ def _initial_rl() -> go.Figure:
     idx = piv.div(piv["naive"], axis=0)        # index relative to Naive per task
     fig.add_hline(y=1.0, line=dict(color=T.ALERT, width=1.3, dash="dash"), opacity=0.7)
     labels = []
-    for method in [m for m in PAIR if m in idx.columns]:
+    # The synthetic RL run logs the replay family as 'recall' (forecasting uses
+    # 'replay'); resolve whichever is present so the line is not dropped.
+    rl_pair = [("replay" if "replay" in idx.columns else "recall"), "sdft"]
+    for method in [m for m in rl_pair if m in idx.columns]:
         y = idx[method]
         T.line(fig, list(idx.index), list(y), method,
                hovertemplate=f"{T.label_of(method)} · task %{{x}}<br>index %{{y:.3f}}<extra></extra>")

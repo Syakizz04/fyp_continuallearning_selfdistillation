@@ -35,7 +35,7 @@ STRATEGY_WIDTH = {
 }
 
 STRATEGY_LABEL = {
-    "sdft": "SDFT", "replay": "Replay", "recall": "RECALL",
+    "sdft": "SDFT", "replay": "Replay", "recall": "Replay",
     "ewc": "EWC", "naive": "Naive", "frozen": "Frozen",
 }
 
