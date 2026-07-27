@@ -1,0 +1,49 @@
+# Streamlit native theming — research instrument, light, one muted accent (deep teal).
+# Fonts pulled via fontFaces (IBM Plex Sans / Mono). A CSS @import in the app
+# mirrors these so type renders even if the CDN font files are unavailable.
+
+[theme]
+base = "light"
+primaryColor = "#0E6E6E"            # deep teal — the single accent
+backgroundColor = "#FCFCFA"          # near-white
+secondaryBackgroundColor = "#F2F1EC" # warm paper for tiles / sidebar
+textColor = "#1A1A1A"                # near-black
+font = "IBM Plex Sans"
+headingFont = "IBM Plex Sans"
+codeFont = "IBM Plex Mono"
+baseFontSize = 16                    # projector-legible
+borderColor = "#D8D6CE"
+showSidebarBorder = true
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "https://cdn.jsdelivr.net/fontsource/fonts/ibm-plex-sans@latest/latin-400-normal.woff2"
+weight = 400
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "https://cdn.jsdelivr.net/fontsource/fonts/ibm-plex-sans@latest/latin-500-normal.woff2"
+weight = 500
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "https://cdn.jsdelivr.net/fontsource/fonts/ibm-plex-sans@latest/latin-600-normal.woff2"
+weight = 600
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "https://cdn.jsdelivr.net/fontsource/fonts/ibm-plex-mono@latest/latin-400-normal.woff2"
+weight = 400
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "https://cdn.jsdelivr.net/fontsource/fonts/ibm-plex-mono@latest/latin-500-normal.woff2"
+weight = 500
+style = "normal"
+
+[server]
+runOnSave = true

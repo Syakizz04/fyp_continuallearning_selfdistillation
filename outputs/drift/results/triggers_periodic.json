@@ -1,0 +1,37 @@
+{
+  "arm": "periodic",
+  "n_fc_triggers": 0,
+  "n_rl_triggers": 5,
+  "events": [
+    {
+      "date": "2013-05-21",
+      "kind": "rl",
+      "profit_index": 0.994343671233082,
+      "floor": 1.0
+    },
+    {
+      "date": "2013-08-13",
+      "kind": "rl",
+      "profit_index": 0.922943780642681,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-01-28",
+      "kind": "rl",
+      "profit_index": 0.7054352520201083,
+      "floor": 1.0
+    },
+    {
+      "date": "2014-03-25",
+      "kind": "rl",
+      "profit_index": 0.8339297551818519,
+      "floor": 1.0
+    },
+    {
+      "date": "2015-07-14",
+      "kind": "rl",
+      "profit_index": 0.9133595390214146,
+      "floor": 1.0
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "strategy": "periodic",
+  "n_fc_retrains": 5,
+  "n_rl_retrains": 5,
+  "fc_epochs_total": 5,
+  "rl_steps_total": 2000,
+  "events": [
+    {
+      "date": "2013-07-16",
+      "model": "forecasting",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 11700
+    },
+    {
+      "date": "2013-07-16",
+      "model": "rl",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-01-28",
+      "model": "forecasting",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 11700
+    },
+    {
+      "date": "2014-01-28",
+      "model": "rl",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-08-12",
+      "model": "forecasting",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 11700
+    },
+    {
+      "date": "2014-08-12",
+      "model": "rl",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 5700
+    },
+    {
+      "date": "2015-02-24",
+      "model": "forecasting",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 11700
+    },
+    {
+      "date": "2015-02-24",
+      "model": "rl",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 5700
+    },
+    {
+      "date": "2015-09-08",
+      "model": "forecasting",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 11700
+    },
+    {
+      "date": "2015-09-08",
+      "model": "rl",
+      "strategy": "periodic",
+      "reason": "periodic",
+      "window_rows": 5700
+    }
+  ]
+}
