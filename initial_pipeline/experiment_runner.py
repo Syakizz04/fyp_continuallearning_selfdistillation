@@ -19,11 +19,11 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
 
-from .core_pipeline import CONFIG, DEVICE, SEED, ckpt_path, console, prepare_data, print_task_summary
+from .core_pipeline import CONFIG, DEVICE, SEED, ckpt_path, console, configure_vast_ai, prepare_data, print_task_summary
 from .trainers import (
     CKPT_MGR, LOGGER, CLTFT, DynamicPricingEnv, ForecastingReplayBuffer,
     PPOEWCEngine, RLReplayBuffer, RLTeacherStore, TimeSeriesDataSet,
-    build_cltft, compute_bwt_fwt, evaluate_forecasting, evaluate_rl,
+    build_cltft, compute_bwt_fwt, compute_forgetting, evaluate_forecasting, evaluate_rl,
     filter_tft_eval_frame, make_pricing_env, make_tft_dataset, make_tft_loaders,
     min_tft_rows,
 )
@@ -546,6 +546,9 @@ def run_experiment(tft_tasks, rl_tasks):
             _rl_ewc_engine["ewc"]   = PPOEWCEngine(CONFIG["cl"]["ewc_lambda"])
             _rl_recall_buf["recall"] = RLReplayBuffer(CONFIG["cl"]["recall_buffer_capacity"])
             _rl_teacher["sdft"]      = RLTeacherStore()
+            # naive[j, j] reference for the live profit_index shown in eval logs.
+            # naive runs first, so its diagonal seeds this as the run progresses.
+            rl_profit_denom: Dict[int, float] = {}
 
         for cl_method in cl_methods[model_type]:
             console.print(f"\n[bold cyan]  ── CL Method: {cl_method} ──[/bold cyan]")
@@ -622,7 +625,10 @@ def run_experiment(tft_tasks, rl_tasks):
                             metrics       = metrics,
                             eval_phase    = "seen",
                         )
-                        metric_str = "  ".join(f"{k}={v:.4f}" for k,v in metrics.items() if not np.isnan(v))
+                        display    = _with_live_profit_index(
+                            model_type, cl_method, task_id, eval_task_id, metrics, rl_profit_denom
+                        ) if model_type == "rl" else metrics
+                        metric_str = _format_metrics(display)
                         console.print(f"    Eval task {eval_task_id}: {metric_str}")
 
                     # ───────────────────────────────────────────────────────
@@ -649,7 +655,10 @@ def run_experiment(tft_tasks, rl_tasks):
                                 metrics       = metrics,
                                 eval_phase    = "future",
                             )
-                            metric_str = "  ".join(f"{k}={v:.4f}" for k,v in metrics.items() if not np.isnan(v))
+                            display    = _with_live_profit_index(
+                                model_type, cl_method, task_id, eval_task_id, metrics, rl_profit_denom
+                            ) if model_type == "rl" else metrics
+                            metric_str = _format_metrics(display)
                             console.print(f"    Future eval task {eval_task_id}: {metric_str}")
 
                     # ───────────────────────────────────────────────────────
@@ -679,6 +688,38 @@ def run_experiment(tft_tasks, rl_tasks):
 
 
 # ─── Cell: BWT / FWT Computation ─────────────────────────────────────────────
+
+def _format_metrics(metrics: Dict[str, float]) -> str:
+    """Render an eval metrics dict for the console, dropping NaNs. profit_index —
+    the RL headline metric — is surfaced first when present."""
+    items = sorted(metrics.items(), key=lambda kv: kv[0] != "profit_index")
+    return "  ".join(
+        f"{k}={v:.4f}" for k, v in items
+        if not (isinstance(v, float) and np.isnan(v))
+    )
+
+
+def _with_live_profit_index(model_type: str, cl_method: str, train_task_id: int,
+                            eval_task_id: int, metrics: Dict[str, float],
+                            denom: Dict[int, float]) -> Dict[str, float]:
+    """Augment an RL metrics dict with a live ``profit_index`` for the run log.
+
+    profit_index[*, j] = cumulative_profit / naive_profit[j, j]. naive runs first,
+    so its diagonal (train==eval) seeds ``denom`` task-by-task; every later method
+    then has the full reference. Mirrors :func:`append_profit_index_metric` exactly
+    — this is just the live view (the authoritative rows are still derived there).
+    When the naive reference isn't available yet (naive's own future-task evals),
+    profit_index is simply omitted rather than shown wrong."""
+    if cl_method == "naive" and eval_task_id == train_task_id:
+        denom[eval_task_id] = metrics.get("cumulative_profit", np.nan)
+
+    out = dict(metrics)
+    d   = denom.get(eval_task_id)
+    cp  = metrics.get("cumulative_profit")
+    if cp is not None and d is not None and np.isfinite(d) and abs(d) > 1e-9:
+        out["profit_index"] = float(cp) / float(d)
+    return out
+
 
 def append_profit_index_metric(model_type: str = "rl",
                                base_metric: str = "cumulative_profit") -> None:
@@ -766,6 +807,10 @@ def compute_all_cl_metrics() -> pd.DataFrame:
                 primary_is_higher_better=higher_better,
                 fwt_baseline_matrix=fwt_baseline_mat,
             )
+            forgetting, avg_forgetting = compute_forgetting(
+                mat,
+                primary_is_higher_better=higher_better,
+            )
 
             # Average performance on seen tasks at final task
             n_tasks     = len(CONFIG["tasks"])
@@ -782,6 +827,8 @@ def compute_all_cl_metrics() -> pd.DataFrame:
                 "avg_online_perf"     : round(avg_online, 4),
                 "bwt"                 : round(bwt, 4),
                 "fwt"                 : round(fwt, 4),
+                "forgetting"          : round(forgetting, 4),
+                "avg_forgetting"      : round(avg_forgetting, 4),
             })
 
     return pd.DataFrame(records)
@@ -789,7 +836,7 @@ def compute_all_cl_metrics() -> pd.DataFrame:
 
 def build_cl_summary() -> pd.DataFrame:
     cl_summary = compute_all_cl_metrics()
-    console.print("\n[bold]CL Summary (BWT / FWT):[/bold]")
+    console.print("\n[bold]CL Summary (BWT / FWT / Forgetting):[/bold]")
     console.print(cl_summary.to_string(index=False))
     return cl_summary
 
@@ -838,7 +885,7 @@ def print_and_save_comparison_tables(cl_summary: Optional[pd.DataFrame] = None) 
             print(table.to_string())
             table.to_csv(f"{CONFIG['paths']['results']}/{name}.csv")
     print("\n" + "=" * 62)
-    print("  CL METRICS - BWT / FWT SUMMARY")
+    print("  CL METRICS - BWT / FWT / FORGETTING SUMMARY")
     print("=" * 62)
     print(cl_summary.to_string(index=False))
     return tables
@@ -858,7 +905,7 @@ METHOD_LABELS = {
     "ewc"   : "EWC",
     "replay": "Custom Replay",
     "recall": "RECALL",
-    "sdft"  : "SDFT (Ours)",
+    "sdft"  : "SDFT",
 }
 TASK_NAMES = [t["name"].replace("_", "\n") for t in CONFIG["tasks"]]
 
@@ -961,41 +1008,44 @@ def plot_performance_matrix(model_type: str, metric: str, title: str,
 
 
 def plot_bwt_fwt_bar(cl_summary: pd.DataFrame):
-    """Bar chart comparing BWT and FWT across methods and model types."""
+    """Bar chart comparing transfer and forgetting metrics."""
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     for ax, model_type in zip(axes, CONFIG["model_types"]):
         sub     = cl_summary[cl_summary["model_type"] == model_type]
         methods = sub["cl_method"].tolist()
         x       = np.arange(len(methods))
-        w       = 0.35
+        w       = 0.25
 
         bwt_vals = sub["bwt"].values
         fwt_vals = sub["fwt"].values
+        forgetting_vals = sub["avg_forgetting"].values if "avg_forgetting" in sub else np.zeros(len(sub))
         colors   = [COLORS.get(m, "#888") for m in methods]
 
-        bars1 = ax.bar(x - w/2, bwt_vals, w, label="BWT",
+        bars1 = ax.bar(x - w, bwt_vals, w, label="BWT",
                        color=[c + "99" for c in colors], edgecolor="black", linewidth=0.8)
-        bars2 = ax.bar(x + w/2, fwt_vals, w, label="FWT",
+        bars2 = ax.bar(x, fwt_vals, w, label="FWT",
                        color=colors,  edgecolor="black", linewidth=0.8)
+        bars3 = ax.bar(x + w, forgetting_vals, w, label="Avg Forgetting",
+                       color=[c + "55" for c in colors], edgecolor="black", linewidth=0.8)
 
         ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
         ax.set_xticks(x)
         ax.set_xticklabels([METHOD_LABELS.get(m, m) for m in methods], fontsize=10, rotation=15)
-        ax.set_title(f"{model_type.capitalize()} — BWT & FWT", fontsize=12, fontweight="bold")
-        ax.set_ylabel("Transfer Value\n(positive = better transfer / less forgetting)", fontsize=9)
+        ax.set_title(f"{model_type.capitalize()} - Transfer & Forgetting", fontsize=12, fontweight="bold")
+        ax.set_ylabel("Metric value\n(BWT/FWT higher is better; forgetting lower is better)", fontsize=9)
         ax.legend(fontsize=10)
 
         # Annotate
-        for bar in list(bars1) + list(bars2):
+        for bar in list(bars1) + list(bars2) + list(bars3):
             h = bar.get_height()
             ax.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width()/2, h),
                         xytext=(0, 3 if h >= 0 else -10),
                         textcoords="offset points", ha="center", fontsize=8)
 
-    plt.suptitle("Continual Learning Transfer Metrics (BWT / FWT)", fontsize=13, fontweight="bold")
+    plt.suptitle("Continual Learning Metrics (BWT / FWT / Avg Forgetting)", fontsize=13, fontweight="bold")
     plt.tight_layout()
-    fpath = f"{CONFIG['paths']['plots']}/bwt_fwt_comparison.png"
+    fpath = f"{CONFIG['paths']['plots']}/cl_transfer_forgetting_comparison.png"
     plt.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.show()
     console.print(f"  Saved: {fpath}")
@@ -1003,12 +1053,15 @@ def plot_bwt_fwt_bar(cl_summary: pd.DataFrame):
 
 def plot_final_summary_table(cl_summary: pd.DataFrame):
     """Render cl_summary as a styled matplotlib table."""
-    fig, ax = plt.subplots(figsize=(13, 3))
+    fig, ax = plt.subplots(figsize=(15, 3.8))
     ax.axis("off")
 
     display = cl_summary.copy()
+    display = display.drop(columns=["fwt"], errors="ignore")   # forward transfer omitted
     display["cl_method"]  = display["cl_method"].map(lambda m: METHOD_LABELS.get(m, m))
-    display["model_type"] = display["model_type"].str.capitalize()
+    _MODEL_LABELS = {"forecasting": "Forecasting", "rl": "Reinforcement Learning"}
+    display["model_type"] = display["model_type"].map(
+        lambda m: _MODEL_LABELS.get(m, m.capitalize()))
     display = display.rename(columns={
         "model_type"    : "Model",
         "cl_method"     : "Method",
@@ -1016,7 +1069,8 @@ def plot_final_summary_table(cl_summary: pd.DataFrame):
         "avg_final_perf": "Avg Final",
         "avg_online_perf": "Avg Online",
         "bwt"           : "BWT ↑",
-        "fwt"           : "FWT ↑",
+        "forgetting"    : "Forgetting ↓",
+        "avg_forgetting": "Avg Forgetting ↓",
     })
 
     table = ax.table(
@@ -1065,6 +1119,9 @@ def generate_all_plots(cl_summary: Optional[pd.DataFrame] = None) -> pd.DataFram
 
 
 if __name__ == "__main__":
+    # Local full run: keeps default (project-local) paths, sets device + selects
+    # bf16-mixed on a supported GPU (else fp32), and prints hardware diagnostics.
+    configure_vast_ai(require_gpu=False)
     tft_tasks, rl_tasks, _, _ = prepare_data()
     print_task_summary(tft_tasks, rl_tasks)
     run_experiment(tft_tasks, rl_tasks)

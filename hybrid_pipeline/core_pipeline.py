@@ -122,6 +122,16 @@ CONFIG = {
         "vf_coef"               : 0.5,
         "max_grad_norm"         : 0.5,
         "total_timesteps_per_task": 50_000,
+        # Sales cap at stock on hand and lost sales are charged for, so
+        # `inventory_level` has a causal path to reward at all. Without this it
+        # is an observation the agent cannot be rewarded or punished for using,
+        # and it correctly learns to ignore it. Paired with the cover-based
+        # inventory scaling in DynamicPricingEnv._precompute; together they took
+        # the agent's response to a degraded stock signal from ~4% of decisions
+        # to 35-70%. Enabled by default from FYP2 onward - it changes the reward,
+        # so FYP1's RL numbers are NOT comparable to runs made with it on.
+        "inventory_constrained": True,
+        "lost_sale_penalty": 0.5,
         "eval_episodes"         : 10,
         # Action space: 11 discrete price tiers from -10% to +10%.
         "price_tiers"           : [

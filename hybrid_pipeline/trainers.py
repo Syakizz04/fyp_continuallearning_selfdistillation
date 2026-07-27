@@ -502,6 +502,14 @@ class DynamicPricingEnv(gym.Env):
         self._seed   = seed
         self.price_tiers = list(CONFIG["rl"]["price_tiers"])
 
+        # Off by default: turning it on changes the reward, so FYP1's RL numbers
+        # would no longer be comparable. Read from CONFIG at construction time so
+        # a scenario can enable it the same way everything else is configured.
+        self.inventory_constrained = bool(
+            CONFIG["rl"].get("inventory_constrained", False))
+        self.lost_sale_penalty = float(
+            CONFIG["rl"].get("lost_sale_penalty", 0.5))
+
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
             shape=(self.STATE_DIM,), dtype=np.float32,
@@ -540,6 +548,38 @@ class DynamicPricingEnv(gym.Env):
         self._realized_demand = df.get("realized_demand", pd.Series(50)).values.astype(np.float32)
         self._unit_cost       = df.get("base_price",      pd.Series(50)).values.astype(np.float32) * 0.55
         self._stockout        = df.get("stockout_flag",   pd.Series(0)).values.astype(np.float32)
+        # RAW inventory, not the normalised observation. Used only when
+        # `inventory_constrained` is on - see step().
+        self._inventory_raw   = df.get("inventory_level",
+                                       pd.Series(np.inf)).values.astype(np.float32)
+
+        if self.inventory_constrained and "inventory_level" in df.columns:
+            # Re-scale the inventory OBSERVATION to days of cover.
+            #
+            # `safe_norm` divides by the maximum across the whole frame, which is
+            # the largest stock level of the busiest SKU. On this panel that is
+            # 205 units, so a slow-moving SKU sitting on 1, 2 or 3 units maps to
+            # 0.005, 0.010, 0.015 - indistinguishable to the network, and those
+            # are precisely the states where stock should change the price. The
+            # measured symptom was an agent that responded to inventory LEAST
+            # when stock was scarcest (0% of decisions at under 2 days of cover,
+            # against 6% when stock was ample).
+            #
+            # Days of cover is the scale the decision actually turns on: "two
+            # days left" means the same thing for a fast and a slow SKU, whereas
+            # "ten units" does not. Clipped at two weeks, beyond which more stock
+            # makes no difference to a pricing decision.
+            mean_d = (df.groupby("product_id")["realized_demand"].transform("mean")
+                      if "product_id" in df.columns
+                      else pd.Series(df["realized_demand"].mean(), index=df.index))
+            self._mean_demand = np.maximum(
+                mean_d.to_numpy(dtype=np.float32), 1e-6).astype(np.float32)
+            cover = (df["inventory_level"].to_numpy(dtype=np.float32)
+                     / self._mean_demand)
+            self._inventory = np.clip(cover / self.COVER_CLIP_DAYS,
+                                      0.0, 1.0).astype(np.float32)
+        else:
+            self._mean_demand = None
 
         # Oracle best reward per step, precomputed once and vectorized over price
         # tiers. The oracle depends only on the data (not the policy), so there is
@@ -550,8 +590,46 @@ class DynamicPricingEnv(gym.Env):
         ratio   = price / base_p                                           # (N,T)
         demand  = np.maximum(self._realized_demand, 0.0)[:, None]          # (N,1)
         adj     = demand * np.power(ratio, self._elasticity[:, None])      # (N,T)
-        profit  = (price - self._unit_cost[:, None]) * np.maximum(0.0, adj)  # (N,T)
+        adj     = np.maximum(0.0, adj)
+        if self.inventory_constrained:
+            # The oracle must face the same constraint as the policy, or regret
+            # and profit_index are measured against an unreachable benchmark.
+            stock = self._inventory_raw[:, None]
+            sold  = np.minimum(adj, stock)
+            lost  = adj - sold
+            profit = ((price - self._unit_cost[:, None]) * sold
+                      - self.lost_sale_penalty * price * lost)
+        else:
+            profit = (price - self._unit_cost[:, None]) * adj              # (N,T)
         self._opt_reward = (profit.max(axis=1) / 1000.0).astype(np.float32)  # (N,)
+
+    #: Stock beyond this many days of cover makes no difference to a price.
+    COVER_CLIP_DAYS = 14.0
+
+    def inventory_obs(self, idx: int, inventory_level: float) -> float:
+        """
+        Map a RAW stock level onto this row's inventory observation slot.
+
+        Exposed so a serving process can substitute a different stock figure -
+        a node's stale belief, say - without having to reconstruct the
+        normalisation. Reconstructing it is how the served observation and the
+        trained one drift apart, and under the cover-based scaling it is not even
+        possible to invert from a single row, because the divisor is per-SKU.
+        """
+        if self._mean_demand is not None:
+            cover = inventory_level / float(self._mean_demand[idx])
+            return float(np.clip(cover / self.COVER_CLIP_DAYS, 0.0, 1.0))
+        # Legacy path: inventory was normalised twice (global max in
+        # build_rl_features, then this frame's max), so recover the composite
+        # divisor empirically from a row where the normalised value is non-zero.
+        raw = self._inventory_raw
+        norm = np.asarray(self._inventory, dtype=float)
+        usable = np.flatnonzero((norm > 0) & np.isfinite(norm) & (raw > 0))
+        if not len(usable):
+            return 0.0
+        i = int(usable[0])
+        scale = float(raw[i] / norm[i])
+        return float(inventory_level / scale) if scale else 0.0
 
     def _get_obs(self, idx: int) -> np.ndarray:
         return np.array([
@@ -589,11 +667,42 @@ class DynamicPricingEnv(gym.Env):
         adj_demand  = base_demand * (price_ratio ** elasticity)
         adj_demand  = max(0.0, round(adj_demand))
 
-        # Revenue & profit
-        revenue       = price * adj_demand
-        profit_margin = (price - cost) * adj_demand
-        stockout      = float(self._stockout[idx])
-        stockout_pen  = 0.15 * revenue * stockout
+        if self.inventory_constrained:
+            # Sales are capped by stock on hand, and demand generated but not
+            # served is charged for.
+            #
+            # WITHOUT this, `inventory_level` is an observation with no causal
+            # path to reward: the agent cannot be rewarded or punished for
+            # pricing against it, so it correctly learns to ignore it. That was
+            # measured - sweeping the inventory input across its whole range
+            # moved under 5% of pricing decisions, and retraining on a realistic
+            # inventory series did NOT change that, because the defect is here in
+            # the reward rather than in the data.
+            #
+            # With it, the economics the project claims to model actually bind:
+            # cutting price into low stock manufactures demand that cannot be
+            # served, so the agent has a reason to raise price as stock falls -
+            # and a reason to care whether its stock figure is correct, which is
+            # the premise of the whole staleness experiment.
+            stock       = float(self._inventory_raw[idx])
+            sold        = min(adj_demand, stock)
+            lost        = adj_demand - sold
+            revenue     = price * sold
+            profit_margin = (price - cost) * sold
+            stockout_pen  = self.lost_sale_penalty * price * lost
+            # Endogenous now: a consequence of the agent's own pricing against
+            # the stock it had, not a flag read off the dataset row.
+            stockout      = 1.0 if lost > 0 else 0.0
+        else:
+            # Original behaviour, preserved so FYP1's RL results stay comparable.
+            # `stockout` here is exogenous - read from the dataset row, identical
+            # whatever the agent does - so it shifts the reward without ever
+            # depending on the action.
+            revenue       = price * adj_demand
+            profit_margin = (price - cost) * adj_demand
+            stockout      = float(self._stockout[idx])
+            stockout_pen  = 0.15 * revenue * stockout
+            sold, lost    = adj_demand, 0.0
 
         reward = (profit_margin - stockout_pen) / 1000.0  # scale to ~[-1, 5]
         reward = float(np.clip(reward, -5.0, 5.0))
