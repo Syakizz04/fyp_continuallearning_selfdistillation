@@ -163,11 +163,11 @@ def main(argv=None) -> int:
     if args.inventory_constrained:
         # Set before any env is constructed: DynamicPricingEnv reads these in
         # __init__, per the repo's mutate-CONFIG-in-place convention.
+        # One CONFIG now that the trainers are vendored into drift_pipeline; this
+        # previously had to set the same keys on hybrid's copy as well.
         from drift_pipeline.core_pipeline import CONFIG
-        import hybrid_pipeline.core_pipeline as hcfg
-        for cfg in (CONFIG, hcfg.CONFIG):
-            cfg["rl"]["inventory_constrained"] = True
-            cfg["rl"]["lost_sale_penalty"] = args.lost_sale_penalty
+        CONFIG["rl"]["inventory_constrained"] = True
+        CONFIG["rl"]["lost_sale_penalty"] = args.lost_sale_penalty
         print(f"  reward: inventory-constrained "
               f"(lost-sale penalty {args.lost_sale_penalty})")
 

@@ -94,18 +94,22 @@ There is no installed package / `sys.path` setup — run modules from the **proj
 
 ## Architecture
 
-Each `*_pipeline/` directory is a self-contained package with the same three-module layout. Modules import each other relatively (`from .core_pipeline import ...`), so a package is run as `python -m <pkg>.experiment_runner`.
+Each `*_pipeline/` directory is a self-contained package sharing a three-module layout. Modules import each other relatively (`from .core_pipeline import ...`), so a package is run as `python -m <pkg>.experiment_runner`.
 
 - **`core_pipeline.py`** — the single source of truth `CONFIG` dict (paths, the 6 tasks, TFT/PPO/CL hyperparameters, hardware). Importing it is side-effect-light: it seeds RNGs, detects device, and creates output dirs, but does **not** load data or train. Data flow: `prepare_data()` → `load_and_clean()` → `build_tft_dataframe()` / `build_rl_features()` → `split_tasks()` (date-range slices into 6 task DataFrames).
 - **`trainers.py`** — model components and shared CL machinery: `CLTFT` (TFT subclass that injects EWC/SDFT penalties in `training_step`), `DynamicPricingEnv` (Gymnasium env, 13-dim state / 11 discrete price tiers), metric functions (`compute_mase/smape`, `evaluate_rl`, `compute_bwt_fwt`), the replay buffers / EWC engine / teacher stores, and the global `LOGGER` + `CKPT_MGR` singletons.
 - **`experiment_runner.py`** — orchestration + plotting. Per-method trainer functions live in `FORECAST_TRAINERS` / `RL_TRAINERS` dicts. `run_experiment()` is the nested loop: `for model_type → for cl_method → for task: train, evaluate on all seen tasks, checkpoint`. CL methods carry state **across tasks** via module-level dicts (`_fc_model_state`, `_rl_recall_buf`, etc.), reset per model_type. Then `build_cl_summary()` / `generate_all_plots()` compute BWT/FWT and render figures.
 
-### The two pipeline packages
+### The packages
 
-- **`initial_pipeline/`** is the **base** package (the four base CL methods: naive / ewc / replay-or-recall / sdft). It writes to `outputs/`. (There was previously a byte-identical `fyp_pipeline/` copy — it has been removed; `initial_pipeline` is now canonical for the base methods.)
-- **`hybrid_pipeline/`** is the extended variant — it adds **drift-adaptive** methods (`compute_distribution_drift`, `adaptive_strengths`, `train_forecast_drift_adaptive_replay_ewc`, `adaptive_drift`) that scale EWC/distillation/replay strength by measured task distribution shift. It writes to `outputs/hybrid/` instead of `outputs/`, and uses `compute_forgetting` in place of the base `compute_bwt_fwt`.
+- **`initial_pipeline/`** — **FYP1**, and the only surviving offline batch package. The four base CL methods (naive / ewc / replay-or-recall / sdft) over the 6-task synthetic sequence. Writes to `outputs/`.
+- **`drift_pipeline/`** — **FYP2's engine**, and self-contained. Same three-module layout plus `trainers.py`, `monitor.py`, `retrain.py`, `censoring.py`, `memory_accounting.py`, `metrics.py`. Writes to `outputs/drift/`.
 
-`initial_pipeline` and `hybrid_pipeline` share the same `CLTFT`/`_sdft_loss`/`training_step` core, so a change to that shared machinery in one usually needs mirroring in the other. When asked to "change the pipeline," clarify which package — base or hybrid.
+`hybrid_pipeline/` **has been removed.** It was an FYP1 drift-adaptive variant that the FYP1 writeup never used, but the whole FYP2 stack had come to import its engine from it — so the dependency ran backwards, and a `sync_config()` shim existed purely to reconcile the two packages' separate `CONFIG` dicts. Its machinery is now vendored into `drift_pipeline/trainers.py` and there is one `CONFIG`.
+
+**`drift_pipeline/trainers.py` is a deliberate byte-level copy, not a rewrite.** The base checkpoints under `outputs/drift/checkpoints/` were trained by that code, and `build_cltft` must reconstruct exactly that architecture for `base_tft.ckpt` to load. Verified behaviour-preserving: a 6-check walk returns MASE `1.469544` before and after. Treat edits to `CLTFT` / `_sdft_loss` / `training_step` as checkpoint-invalidating.
+
+`initial_pipeline` no longer shares code with anything, so changes there need no mirroring — the old "mirror it into the other package" rule is gone with `hybrid_pipeline`.
 
 ## Conventions and gotchas
 

@@ -41,12 +41,9 @@ from . import base_training as bt
 from . import monitor as mon
 from .memory_accounting import MemoryLog, reset_peak
 
-from hybrid_pipeline.trainers import (
+from .trainers import (
     build_cltft, make_tft_dataset, make_pricing_env, DynamicPricingEnv,
     ForecastingReplayBuffer, RLReplayBuffer, RLTeacherStore, PPOEWCEngine,
-)
-# CL callbacks live in hybrid's experiment_runner (PPO gradient hooks).
-from hybrid_pipeline.experiment_runner import (
     RECALLCallback, EWCCallbackRL, SDFTCallback,
 )
 

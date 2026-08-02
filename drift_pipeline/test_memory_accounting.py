@@ -6,7 +6,7 @@ so the suite stays fast and needs no data, no checkpoints and no GPU. The
 stand-ins mirror the real attribute names (`buffer_by_task`, `transitions_by_task`,
 `fisher`/`opt_params`, `teacher_policy`, `ewc_fisher`/`_ewc_dev_cache`, `.teacher`),
 which is exactly the contract `memory_accounting` depends on — if a field is
-renamed in `hybrid_pipeline/trainers.py`, the corresponding test here goes to
+renamed in `drift_pipeline/trainers.py`, the corresponding test here goes to
 zero bytes and fails loudly instead of silently under-reporting.
 """
 

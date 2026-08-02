@@ -4,14 +4,13 @@
 # then characterises "normal" behaviour on the held-out calibration tail so the
 # drift thresholds (forecasting mu+k*sigma; RL profit floor) are grounded in data.
 #
-# Reuses the model/CL machinery in hybrid_pipeline.trainers. Because those
-# trainers read hybrid_pipeline.core_pipeline.CONFIG, we first sync drift's shared
-# config keys into it (the repo's mutate-CONFIG-in-place idiom) — no third copy
-# of the 1500-line trainer module.
+# Uses the model/CL machinery in drift_pipeline.trainers, which reads this
+# package's own CONFIG. It previously came from hybrid_pipeline and needed a
+# config-syncing shim to reconcile the two packages' separate CONFIG dicts;
+# vendoring removed both the shim and the backwards dependency.
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -27,23 +26,24 @@ from stable_baselines3 import PPO
 from . import core_pipeline as dcfg
 from .core_pipeline import CONFIG, DEVICE, SEED, console, slice_by_dates
 
-import hybrid_pipeline.core_pipeline as hcfg
-from hybrid_pipeline.trainers import (
+from .trainers import (
     build_cltft, make_tft_dataset, make_tft_loaders, make_pricing_env,
     filter_tft_eval_frame, min_tft_rows, evaluate_forecasting, evaluate_rl,
 )
 
-_SHARED_KEYS = ["forecasting", "rl", "cl", "hardware", "paths"]
-
 
 def sync_config() -> None:
-    """Push drift's shared CONFIG keys into hybrid's CONFIG so hybrid trainers
-    operate on M5 settings (M5 known_reals, item x store groups, drift paths).
-    Idempotent; call before any training/eval."""
-    for key in _SHARED_KEYS:
-        hcfg.CONFIG[key] = copy.deepcopy(CONFIG[key])
-    # hybrid's TimeSeriesDataSet code references CONFIG["forecasting"] only;
-    # keep its other keys intact. Ensure output dirs exist under outputs/drift.
+    """Ensure the drift output tree exists. Idempotent; call before training/eval.
+
+    This used to also deep-copy drift's shared CONFIG keys into
+    `hybrid_pipeline.core_pipeline.CONFIG`, because the trainers lived in that
+    package and read its config rather than this one. `drift_pipeline.trainers`
+    now reads CONFIG from this package directly, so there is only one config and
+    nothing to reconcile.
+
+    The name and the ~9 call sites are kept: the directory-creation half is still
+    required, and callers should not have to know that the other half went away.
+    """
     dcfg.ensure_output_dirs()
 
 

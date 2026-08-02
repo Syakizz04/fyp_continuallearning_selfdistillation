@@ -26,8 +26,7 @@ from . import core_pipeline as dcfg
 from .core_pipeline import CONFIG, DEVICE, console
 from . import base_training as bt
 
-import hybrid_pipeline.core_pipeline as hcfg
-from hybrid_pipeline.trainers import build_cltft, TimeSeriesDataSet
+from .trainers import build_cltft, TimeSeriesDataSet
 
 
 # ─── Base model + calibration loading ────────────────────────────────────────
@@ -46,7 +45,7 @@ def load_base(paths: Optional[Dict[str, str]] = None) -> Dict:
         "calibration": str(res_dir / "calibration.json"),
     }
 
-    # Re-apply the exact base-train forecasting/cl config, then sync to hybrid.
+    # Re-apply the exact base-train forecasting/cl config.
     meta = json.loads(Path(paths["meta"]).read_text())
     CONFIG["forecasting"] = meta["forecasting"]
     CONFIG["cl"]          = meta["cl"]

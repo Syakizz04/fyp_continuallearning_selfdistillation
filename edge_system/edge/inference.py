@@ -227,7 +227,7 @@ class LocalInference:
     def forecast(self, sku: str, *, sim_date: str) -> Dict:
         """Local TFT forecast for one SKU as of `sim_date`."""
         import torch  # noqa: PLC0415
-        from hybrid_pipeline.trainers import (  # noqa: PLC0415
+        from drift_pipeline.trainers import (  # noqa: PLC0415
             make_tft_dataset, filter_tft_eval_frame,
         )
         from drift_pipeline.core_pipeline import CONFIG as DRIFT_CONFIG
@@ -296,7 +296,7 @@ class LocalInference:
         full walk-forward panel while training used the base window, so the
         divisors are close but not identical.
         """
-        from hybrid_pipeline.trainers import DynamicPricingEnv  # noqa: PLC0415
+        from drift_pipeline.trainers import DynamicPricingEnv  # noqa: PLC0415
 
         if self._env is None:
             rl = (self.data["rl_full"]

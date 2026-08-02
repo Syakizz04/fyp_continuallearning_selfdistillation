@@ -63,9 +63,9 @@ def measure_static(n_batches: int = N_PROBE_BATCHES) -> pd.DataFrame:
 
     from drift_pipeline import monitor as mon
     from drift_pipeline.core_pipeline import prepare_drift_data
-    from hybrid_pipeline.trainers import (ForecastingReplayBuffer, PPOEWCEngine,
-                                          RLReplayBuffer, RLTeacherStore,
-                                          build_cltft, make_tft_dataset)
+    from drift_pipeline.trainers import (ForecastingReplayBuffer, PPOEWCEngine,
+                                         RLReplayBuffer, RLTeacherStore,
+                                         build_cltft, make_tft_dataset)
 
     rss0 = process_rss_bytes()
     console.print(f"[dim]RSS before load: {rss0 / MB:.0f} MB[/dim]")

@@ -1,4 +1,26 @@
-# Training components for the FYP continual-learning experiment.
+"""
+Model and continual-learning machinery for the deployed FYP2 system.
+
+Vendored from `hybrid_pipeline/trainers.py` (plus the three PPO callbacks that
+lived in `hybrid_pipeline/experiment_runner.py`) so that `drift_pipeline` and
+`edge_system` are self-contained. Before this, the entire FYP2 stack imported
+its engine from an FYP1 *variant* package that FYP1 itself did not use - the
+dependency ran backwards, and a config-syncing shim existed only to reconcile
+the two packages' separate CONFIG dicts.
+
+The code is a deliberate byte-level copy, not a rewrite: the base checkpoints in
+`outputs/drift/checkpoints/` were trained by it, and `build_cltft` has to
+reconstruct exactly that architecture for `base_tft.ckpt` to load. Changing
+anything here risks silently failing to restore the base model.
+
+Dropped as unused by FYP2: `compute_bwt_fwt` / `compute_forgetting` (drift has
+its own `metrics.py`), and `ResultsLogger` / `CheckpointManager` (the drift
+pipeline writes its own long-form CSVs).
+
+The one substantive change is the config source. This module now reads
+`drift_pipeline.core_pipeline.CONFIG` directly, so `base_training.sync_config()`
+no longer has to copy drift's config into hybrid's before every call.
+"""
 
 import copy
 import random
@@ -26,8 +48,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
 
-from .core_pipeline import CONFIG, DEVICE, SEED, ckpt_path, console
-
+from .core_pipeline import CONFIG, DEVICE, SEED, console
 
 # ─── Cell: PyTorch Forecasting TimeSeriesDataSet Builder ─────────────────────
 from pytorch_forecasting.data import GroupNormalizer
@@ -889,96 +910,6 @@ def evaluate_rl(
     }
 
 
-# ── CL Metrics (BWT / FWT) ────────────────────────────────────────────────────
-
-def compute_bwt_fwt(
-    perf_matrix: np.ndarray,
-    primary_is_higher_better: bool = True,
-    fwt_baseline_matrix: Optional[np.ndarray] = None,
-) -> Tuple[float, float]:
-    """
-    Compute Backward Transfer (BWT) and Forward Transfer (FWT).
-
-    perf_matrix[i, j] = performance on task j evaluated after training on task i.
-    Shape: (n_tasks, n_tasks). The upper triangle is filled by evaluating the
-    current model on future/unseen tasks before those tasks are trained.
-
-    BWT = (1/(T-1)) * sum_{i=1}^{T-1} (R_{T,i} - R_{i,i})
-    FWT = (1/(T-1)) * sum_{i=2}^{T}   (R_{i-1,i} - b_i)
-          where b_i comes from fwt_baseline_matrix at the same train/eval
-          point. In the experiment runner this baseline is the naive method's
-          future-task score, so RECALL/EWC/adaptive methods are compared
-          against plain sequential fine-tuning.
-    """
-    T = perf_matrix.shape[0]
-    if T < 2:
-        return 0.0, 0.0
-
-    # BWT: how much does final model forget earlier tasks?
-    bwt_vals = []
-    for i in range(T - 1):
-        r_final  = perf_matrix[T - 1, i]
-        r_at_i   = perf_matrix[i, i]
-        if not (np.isnan(r_final) or np.isnan(r_at_i)):
-            diff = r_final - r_at_i
-            bwt_vals.append(diff if primary_is_higher_better else -diff)
-    bwt = float(np.mean(bwt_vals)) if bwt_vals else 0.0
-
-    # FWT: does past learning help on new tasks?
-    baseline_matrix = fwt_baseline_matrix if fwt_baseline_matrix is not None else perf_matrix
-    fwt_vals = []
-    for i in range(1, T):
-        r_transfer = perf_matrix[i - 1, i]
-        r_baseline = baseline_matrix[i - 1, i]
-        if not (np.isnan(r_transfer) or np.isnan(r_baseline)):
-            diff = r_transfer - r_baseline
-            fwt_vals.append(diff if primary_is_higher_better else -diff)
-    fwt = float(np.mean(fwt_vals)) if fwt_vals else 0.0
-
-    return bwt, fwt
-
-
-def compute_forgetting(
-    perf_matrix: np.ndarray,
-    primary_is_higher_better: bool = True,
-) -> Tuple[float, float]:
-    """
-    Compute total and average forgetting across previous tasks.
-
-    Forgetting is positive when the final model is worse than its best earlier
-    score on an eval task. For lower-is-better metrics this is
-    final_error - best_previous_error. For higher-is-better metrics this is
-    best_previous_score - final_score.
-    """
-    T = perf_matrix.shape[0]
-    if T < 2:
-        return 0.0, 0.0
-
-    forgetting_vals = []
-    for eval_idx in range(T - 1):
-        previous_scores = perf_matrix[eval_idx:T - 1, eval_idx]
-        previous_scores = previous_scores[~np.isnan(previous_scores)]
-        final_score = perf_matrix[T - 1, eval_idx]
-
-        if previous_scores.size == 0 or np.isnan(final_score):
-            continue
-
-        if primary_is_higher_better:
-            best_previous = float(np.max(previous_scores))
-            forgetting = best_previous - float(final_score)
-        else:
-            best_previous = float(np.min(previous_scores))
-            forgetting = float(final_score) - best_previous
-
-        forgetting_vals.append(max(0.0, forgetting))
-
-    total_forgetting = float(np.sum(forgetting_vals)) if forgetting_vals else 0.0
-    avg_forgetting = float(np.mean(forgetting_vals)) if forgetting_vals else 0.0
-    return total_forgetting, avg_forgetting
-
-
-
-
 # ─── Cell: Shared CL Engines (EWC, Replay, SDFT) ─────────────────────────────
 
 # ── 1. Forecasting Replay Buffer ───────────────────────────────────────────────
@@ -1238,124 +1169,112 @@ class PPOEWCEngine:
 
 
 
+# ─── PPO continual-learning callbacks ─────────────────────────────────────────
+# Vendored from hybrid_pipeline/experiment_runner.py, where they sat beside the
+# FYP1 task-loop they were written for. They are model machinery, not
+# orchestration, so they belong here.
+# ── RECALL Callback ───────────────────────────────────────────────────────────
 
-# ─── Cell: Results Logger & Checkpoint Manager ───────────────────────────────
-
-class ResultsLogger:
+class RECALLCallback(BaseCallback):
     """
-    Logs all metric evaluations into a structured DataFrame.
-    Columns: model_type, cl_method, train_task_id, eval_task_id,
-             eval_phase, metric_name, metric_value, timestamp
-    """
+    RECALL-style replay-enhanced CL callback for PPO.
+    After each rollout collection, injects past transitions into the rollout buffer
+    by creating a supplementary batch that modifies the policy gradient signal.
 
-    def __init__(self):
-        self._records: List[Dict] = []
-        # perf_matrix[model_type][cl_method] = 2D np array (n_tasks x n_tasks)
-        self._perf_matrices: Dict[str, Dict[str, np.ndarray]] = defaultdict(dict)
-        self._n_tasks = len(CONFIG["tasks"])
-
-    def log(
-        self,
-        model_type   : str,
-        cl_method    : str,
-        train_task_id: int,
-        eval_task_id : int,
-        metrics      : Dict[str, float],
-        eval_phase   : str = "seen",
-    ):
-        ts = datetime.now().isoformat(timespec="seconds")
-        for metric_name, value in metrics.items():
-            self._records.append({
-                "model_type"    : model_type,
-                "cl_method"     : cl_method,
-                "train_task_id" : train_task_id,
-                "eval_task_id"  : eval_task_id,
-                "eval_phase"    : eval_phase,
-                "metric_name"   : metric_name,
-                "metric_value"  : value,
-                "timestamp"     : ts,
-            })
-
-    def to_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame(self._records)
-
-    def save(self, path: str = None):
-        path = path or str(Path(CONFIG["paths"]["results"]) / "all_metrics.csv")
-        self.to_dataframe().to_csv(path, index=False)
-        console.print(f"  Results saved → {path}")
-
-    def get_perf_matrix(
-        self,
-        model_type : str,
-        cl_method  : str,
-        metric_name: str,
-    ) -> np.ndarray:
-        """
-        Build (n_tasks × n_tasks) performance matrix for BWT/FWT computation.
-        mat[i, j] = metric value on task j after training on task i+1.
-        """
-        df  = self.to_dataframe()
-        sub = df[
-            (df["model_type"] == model_type) &
-            (df["cl_method"]  == cl_method)  &
-            (df["metric_name"]== metric_name)
-        ]
-        n   = len(CONFIG["tasks"])
-        self._n_tasks = n
-        mat = np.full((n, n), np.nan)
-        for _, row in sub.iterrows():
-            i = int(row["train_task_id"]) - 1
-            j = int(row["eval_task_id"])  - 1
-            if 0 <= i < n and 0 <= j < n:
-                mat[i, j] = row["metric_value"]
-        return mat
-
-
-class CheckpointManager:
-    """
-    Saves and loads model checkpoints.
-    Keeps the best checkpoint per method based on primary metric.
+    Implementation: We augment the training by running an additional
+    supervised imitation step on replayed experiences after each PPO update.
+    This preserves past policy behaviour without modifying the core PPO algorithm.
     """
 
-    def __init__(self):
-        self._best: Dict[str, float] = {}
-        self._best_path: Dict[str, str] = {}
+    def __init__(self, replay_buf: RLReplayBuffer, mix_n: int, device: str, bc_coef: float = 0.1):
+        super().__init__(verbose=0)
+        self.replay_buf = replay_buf
+        self.mix_n      = mix_n
+        self.device     = device
+        self.bc_coef    = bc_coef
 
-    def save_forecasting(
-        self,
-        model    : CLTFT,
-        trainer  : L.Trainer,
-        cl_method: str,
-        task_id  : int,
-        metric   : float,
-    ):
-        path = ckpt_path("forecasting", cl_method, task_id)
-        trainer.save_checkpoint(path)
+    def _on_step(self) -> bool:
+        return True
 
-        key = f"forecasting_{cl_method}"
-        # Lower MASE is better
-        if key not in self._best or (not np.isnan(metric) and metric < self._best.get(key, np.inf)):
-            best_path = ckpt_path("forecasting", cl_method, task_id, "best")
-            trainer.save_checkpoint(best_path)
-            self._best[key]      = metric
-            self._best_path[key] = best_path
-            console.print(f"  [green]★ New best {cl_method} MASE={metric:.4f}[/green]")
+    def _on_rollout_end(self):
+        """Called after rollout collection, before PPO update."""
+        if len(self.replay_buf) < self.mix_n:
+            return
 
-    def save_rl(self, model: PPO, cl_method: str, task_id: int, metric: float):
-        path = ckpt_path("rl", cl_method, task_id).replace(".ckpt", "")
-        model.save(path)
+        batch   = self.replay_buf.sample(self.mix_n)
+        obs_t   = torch.tensor(batch["obs"],     dtype=torch.float32, device=self.device)
+        acts_t  = torch.tensor(batch["actions"], dtype=torch.long,    device=self.device)
 
-        key = f"rl_{cl_method}"
-        # Higher cumulative_profit is better
-        if key not in self._best or (not np.isnan(metric) and metric > self._best.get(key, -np.inf)):
-            best_path = ckpt_path("rl", cl_method, task_id, "best").replace(".ckpt", "")
-            model.save(best_path)
-            self._best[key]      = metric
-            self._best_path[key] = best_path
+        policy  = self.model.policy
+        # Compute log-prob under current policy
+        dist    = policy.get_distribution(obs_t)
+        log_p   = dist.log_prob(acts_t)
+
+        # Imitation loss: maximise log-prob of past actions (behaviour cloning)
+        bc_loss = -log_p.mean() * self.bc_coef   # weighted to not dominate PPO loss
+        policy.optimizer.zero_grad()
+        bc_loss.backward()
+        policy.optimizer.step()
 
 
-# ── Instantiate global logger and checkpoint manager ──────────────────────────
-LOGGER  = ResultsLogger()
-CKPT_MGR = CheckpointManager()
+# ── SDFT Callback ─────────────────────────────────────────────────────────────
+
+class SDFTCallback(BaseCallback):
+    """
+    SDFT for RL: KL penalty between frozen old-task policy and current policy.
+    Applied as an auxiliary gradient step after each PPO rollout.
+    """
+
+    def __init__(self, teacher_store: RLTeacherStore, kl_coef: float, device: str):
+        super().__init__(verbose=0)
+        self.teacher_store = teacher_store
+        self.kl_coef       = kl_coef
+        self.device        = device
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self):
+        if self.teacher_store.teacher_policy is None:
+            return
+
+        policy = self.model.policy
+        # Sample recent observations from rollout buffer
+        try:
+            rollout_data = next(self.model.rollout_buffer.get(64))
+            obs_t = rollout_data.observations.to(self.device)
+        except (StopIteration, AttributeError):
+            return
+
+        kl = self.teacher_store.kl_penalty(self.model, obs_t)
+        kl_loss = self.kl_coef * kl
+
+        policy.optimizer.zero_grad()
+        kl_loss.backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
+        policy.optimizer.step()
 
 
+# ── EWC Callback ──────────────────────────────────────────────────────────────
+
+class EWCCallbackRL(BaseCallback):
+    """Applies EWC penalty after each PPO rollout update."""
+
+    def __init__(self, ewc_engine: PPOEWCEngine, device: str, scale: float = 1.0):
+        super().__init__(verbose=0)
+        self.ewc_engine = ewc_engine
+        self.device     = device
+        self.scale      = scale
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self):
+        if not self.ewc_engine.fisher:
+            return
+        policy  = self.model.policy
+        penalty = self.ewc_engine.penalty(policy) * self.scale
+        policy.optimizer.zero_grad()
+        penalty.backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
+        policy.optimizer.step()
