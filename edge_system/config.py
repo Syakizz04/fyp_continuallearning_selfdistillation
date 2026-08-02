@@ -17,9 +17,25 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 SYSTEM_CONFIG: Dict = {
     # ── Topology ────────────────────────────────────────────────────────────
-    # Three sales channels contending for ONE shared stock pool per SKU. This is
-    # the textbook oversell scenario and needs no retraining: it reuses the
-    # existing CA_1 x 100-item checkpoints as-is.
+    # Three sales channels contending for ONE shared stock pool per SKU - the
+    # omnichannel retail setting, where a physical till, an online storefront and
+    # a marketplace listing all decrement the same inventory. This is the textbook
+    # oversell scenario and needs no retraining: it reuses the existing
+    # CA_1 x 100-item checkpoints as-is.
+    #
+    # M5 is Walmart store data, so a physical channel carrying the largest share
+    # is the right shape. The WEIGHTS THEMSELVES ARE AN EXPERIMENTAL CHOICE, NOT
+    # AN EMPIRICAL ONE, and the writeup must say so: Walmart's actual online share
+    # over the M5 window (2011-2016) was roughly 3%, which would leave the pool
+    # effectively single-channel, nothing would contend, and every sync policy
+    # would look identical. These weights are set to put the pool under
+    # contention, which is the regime under study - the same reasoning as
+    # sim.initial_cover_days below.
+    #
+    # M5 records daily unit sales, not the channel a unit sold through. The split
+    # and the discrete order arrivals built from it are a modelling overlay
+    # (see sim/order_gen.py), calibrated so aggregating generated orders recovers
+    # the observed daily total.
     "channels": [
         {"name": "pos",         "port": 8010, "weight": 0.55},
         {"name": "web",         "port": 8011, "weight": 0.35},

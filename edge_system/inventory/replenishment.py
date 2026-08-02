@@ -56,6 +56,13 @@ class InventoryTrace:
     unmet: np.ndarray
     #: Units received that day.
     received: np.ndarray
+    #: Units actually sold that day, i.e. min(on_hand, demand).
+    #:
+    #: Recorded by the loop rather than reconstructed. It cannot be derived from
+    #: the other fields: on a day without a stockout `unmet` is 0 and carries no
+    #: information about how much was sold, so any formula in terms of `unmet`
+    #: alone silently returns the shelf size instead of the sales.
+    served: np.ndarray
 
     @property
     def stockout_rate(self) -> float:
@@ -64,17 +71,19 @@ class InventoryTrace:
     @property
     def fill_rate(self) -> float:
         """Share of demanded units actually served."""
-        served = self.served.sum()
-        total = served + self.unmet.sum()
+        served = float(self.served.sum())
+        total = served + float(self.unmet.sum())
         return float(served / total) if total > 0 else 1.0
 
     @property
-    def served(self) -> np.ndarray:
-        return np.maximum(self.on_hand_after, 0)
+    def demand(self) -> np.ndarray:
+        """The demand this trace was run against: served plus what was missed."""
+        return self.served + self.unmet
 
     @property
     def on_hand_after(self) -> np.ndarray:
-        return self.on_hand - self.unmet
+        """Stock left at the end of each day."""
+        return self.on_hand - self.served
 
 
 def simulate_inventory(
@@ -112,6 +121,7 @@ def simulate_inventory(
     stockout = np.zeros(n, dtype=int)
     unmet = np.zeros(n)
     received = np.zeros(n)
+    sold = np.zeros(n)
 
     stock = level * initial_frac
     pipeline: Dict[int, float] = {}
@@ -127,6 +137,7 @@ def simulate_inventory(
 
         want = demand[i]
         served = min(stock, want)
+        sold[i] = served
         if want > stock:
             stockout[i] = 1
             unmet[i] = want - stock
@@ -138,7 +149,7 @@ def simulate_inventory(
             pipeline[i + max(1, lead_time_days)] = level - position
 
     return InventoryTrace(on_hand=on_hand, stockout=stockout,
-                          unmet=unmet, received=received)
+                          unmet=unmet, received=received, served=sold)
 
 
 def calibrate_cover_days(

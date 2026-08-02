@@ -1,10 +1,64 @@
 # Inventory sync service
 
 Shared stock across three sales channels contending for one pool per SKU.
-This is the measured contribution of FYP2, not plumbing: it replaces the toy
-`_simulate_inventory()` in `dataset_generator/m5/build_m5.py` — an (s,S) loop
-with instant next-day replenishment that was the only fully fabricated part of
-the dataset — with a real reservation algorithm driven by real demand.
+It replaces the toy `_simulate_inventory()` in `dataset_generator/m5/build_m5.py`
+— an (s,S) loop with instant next-day replenishment that was the only fully
+fabricated part of the dataset — with a real reservation algorithm driven by
+real demand.
+
+## Setting: omnichannel retail, not pure e-commerce
+
+The three channels are a physical till (`pos`), an online storefront (`web`) and a
+marketplace listing (`marketplace`). They share one stock pool, which is what
+makes the setting *omnichannel* rather than multichannel: the channels are not
+independently stocked, so a unit sold at the till is a unit the website can no
+longer promise. That shared pool is the entire source of the contention this
+service manages.
+
+This framing matches the data. M5 is Walmart — a physical grocery retailer — so a
+dominant in-store channel is the correct shape, and Walmart is close to the
+canonical omnichannel example (store + walmart.com + marketplace on one
+inventory).
+
+Two things are stated as assumptions rather than claimed as facts:
+
+- **M5 records daily unit sales, not the channel a unit sold through.** The
+  channel split, and the discrete order arrivals built from it, are a modelling
+  overlay (`edge_system/sim/order_gen.py`), calibrated so that aggregating
+  generated orders recovers the observed daily total. The daily total is real;
+  the decomposition is not.
+- **The channel weights (0.55 / 0.35 / 0.10) are an experimental choice.**
+  Walmart's real online share over the M5 window was roughly 3%. At that split
+  the pool is effectively single-channel, nothing contends, and every sync policy
+  measures the same thing. The weights are set to put the pool under contention
+  because contention is the regime under study — the same reasoning that governs
+  `sim.initial_cover_days`.
+
+## What this service is for
+
+**This is apparatus, not the contribution.** The project's contribution is on the
+continual-learning side — SDFT, and whether replay-free CL survives a corrupted
+training signal. This service exists to *produce* that corruption in a controlled,
+measurable way.
+
+That is a real job, and it is the reason the code is held to the standard it is.
+The treatment E2 applies is a fill rate, and a fill rate is only a credible
+treatment if the mechanism that produced it is correct: if the escrow arithmetic
+were wrong, the censoring E2 studies would be an artifact of a bug rather than a
+property of the sync policy. Hence the invariant assertions and the property
+tests. **Their role is to make the apparatus trustworthy, not to claim a result.**
+
+**The algorithms are prior work.** Escrow is O'Neil (1986); the per-node quota is
+the demarcation protocol (1994); the modern restatement is the Bounded Counter
+CRDT (2015). They are implemented here in order to be *measured*, not proposed.
+
+What is new is the measurement itself: the database literature evaluates these
+protocols on throughput and correctness, never on **what they do to the training
+signal of a model downstream**. A node that refuses orders it cannot see stock
+for is destroying its own training data, and nobody has costed that. That cost is
+the bridge from this service to the CL experiment — and it is a bridge, not a
+destination. E1's fill rates (82.7% / 71.7%) are not the finding; they are the
+treatment levels E2 consumes.
 
 ## Layout
 
@@ -41,8 +95,9 @@ stock.
 
 Correctness is unconditional. The cost lands somewhere else: a node knows its
 own quota, **not** the global total, so its view of stock is systematically
-stale and conservative. That is not just an engineering cost — it is the input
-E2 studies, because it reaches the models through two channels:
+stale and conservative. That is not just an engineering cost — it is **the entire
+reason this service is in the project**, because it reaches the models through two
+channels:
 
 1. **Pricing** — the PPO agent's `inventory_level` state feature is the node's
    stale view, so it prices against stock that may not reflect reality.

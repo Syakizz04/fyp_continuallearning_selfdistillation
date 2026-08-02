@@ -13,7 +13,17 @@ centre is consulted*:
 
     escrow_quota   the node pre-acquires a quota and spends it locally with no
                    coordination, returning to the centre only to refill.
-                   Correct AND mostly local - the proposed method.
+                   Correct AND mostly local - the treatment arm.
+
+`escrow_quota` is NOT a contribution of this project. It is O'Neil's escrow
+transactional method (ACM TODS, 1986) combined with the per-node quotas of the
+demarcation protocol (Barbara-Milla & Garcia-Molina, VLDB 1994) - established
+techniques, implemented here to be measured rather than proposed. The project's
+proposed method is SDFT, on the continual-learning side.
+
+What is new here is the measurement: what escrow costs a *learner*. The database
+literature evaluates it on throughput and correctness, not on what it does to the
+training signal of a model sitting downstream of it.
 
 The expected finding is that escrow_quota attains strong_lock's zero-oversell at
 close to eventual's latency, with the cost showing up somewhere else entirely:
@@ -210,7 +220,10 @@ class StrongLockPolicy(SyncPolicy):
 
 class EscrowQuotaPolicy(SyncPolicy):
     """
-    The proposed method: spend a locally-held quota, refill only when it runs low.
+    The treatment arm: spend a locally-held quota, refill only when it runs low.
+
+    Escrow (O'Neil 1986) with demarcation-protocol quotas (1994) - prior work,
+    measured here rather than proposed. See the module docstring.
 
     A reserve that fits inside the node's quota costs zero coordination. When the
     quota cannot cover the order, the node takes a larger block from the centre
