@@ -44,7 +44,7 @@ git clone <your-repo-url> fyp && cd fyp
 
 ```powershell
 # from the laptop, in the project root
-tar -czf payload.tar.gz data/processed_m5_v3 outputs/drift/checkpoints/base_cover
+tar -czf payload.tar.gz data/processed_m5_v4 outputs/drift/checkpoints/base_v4
 scp -P <port> payload.tar.gz root@<host>:~/fyp/
 ```
 
@@ -74,7 +74,7 @@ This is not a formality. It loads the **actual base checkpoint** and confirms th
 TFT, PPO and calibration restore, because a bad upload or a mismatched torch is
 the failure that wastes the whole rental — and it cannot be detected by checking
 that files exist. It also verifies the dataset carries `unmet_demand`, which is
-E2's treatment signal: on the v1 dataset the treatment is empty and the sweep
+E2's treatment signal: on v1/v2 the treatment is empty and the sweep
 would silently measure nothing.
 
 Exit code 0 means go.

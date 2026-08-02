@@ -114,11 +114,14 @@ SYSTEM_CONFIG: Dict = {
         # scaling. The original `base` pricer is kept and is the arm to compare
         # against; it is effectively blind to stock. See
         # experiments/retrain_pricer.py.
-        "base_ckpt_dir": str(PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_cover"),
-        # v3 = v2 with ONLY the inventory columns regenerated (5.1% stockout days
-        # rather than 0.05%). demand_forecasting.csv is byte-identical to v2, so
-        # the base TFT checkpoint remains valid.
-        "data_dir": str(PROJECT_ROOT / "data" / "processed_m5_v3"),
+        "base_ckpt_dir": str(PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_v4"),
+        # v4 = v3 with the two audited pricing features rebuilt: competitor_price
+        # is a real cross-store price for the same item, demand_forecast is the
+        # base TFT's 1-step-ahead output. v3 was v2 with only the inventory
+        # columns regenerated (5.1% stockout days rather than 0.05%).
+        # demand_forecasting.csv is byte-identical throughout, so the base TFT
+        # checkpoint remains valid; the base PPO does not and is retrained.
+        "data_dir": str(PROJECT_ROOT / "data" / "processed_m5_v4"),
     },
 
     # ── Simulation ──────────────────────────────────────────────────────────

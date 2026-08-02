@@ -27,3 +27,6 @@ agent-skills/
 dataset_generator/synthetic_data/output/
 
 .ipynb_checkpoints/
+
+# TensorBoard output from Lightning fits (smoke runs, retrains)
+lightning_logs/

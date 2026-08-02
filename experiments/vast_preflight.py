@@ -50,9 +50,9 @@ def main(argv=None) -> int:
                     help="how many cells you intend to run at once; sizes the "
                          "RAM check")
     ap.add_argument("--data-dir", type=Path,
-                    default=PROJECT_ROOT / "data" / "processed_m5_v3")
+                    default=PROJECT_ROOT / "data" / "processed_m5_v4")
     ap.add_argument("--base-ckpt", type=Path,
-                    default=PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_cover")
+                    default=PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_v4")
     args = ap.parse_args(argv)
 
     print(f"\nPreflight - planning {args.concurrency} concurrent cells\n")
@@ -91,7 +91,7 @@ def main(argv=None) -> int:
 
     # ── 2. Payload ──────────────────────────────────────────────────────────
     for label, path, members in (
-        ("Dataset (v3)", args.data_dir,
+        (f"Dataset ({args.data_dir.name.split('_')[-1]})", args.data_dir,
          ["demand_forecasting.csv", "rl_environment.csv"]),
         ("Base checkpoint", args.base_ckpt,
          ["base_tft.ckpt", "base_tft_dataset.pkl", "base_ppo.zip",

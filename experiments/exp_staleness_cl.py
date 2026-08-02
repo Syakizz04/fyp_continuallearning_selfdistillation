@@ -127,23 +127,28 @@ HEADLINE = "forgetting_mase_base_era"
 #: copying is not a shortcut, it is avoiding three identical hours of GPU.
 STATIC_ARMS = {"frozen"}
 
-#: E2 runs on v3 + base_cover, NOT on drift_pipeline's defaults (processed_m5 +
+#: E2 runs on v4 + base_cover, NOT on drift_pipeline's defaults (processed_m5 +
 #: `base`), and the difference is not cosmetic:
 #:
 #: * v3 regenerated ONLY the inventory columns, taking stockout days from 0.05%
 #:   to 5.1%. `unmet_demand` is the censoring signal, so on the default dataset
 #:   the intrinsic floor is ~0 and `mode="intrinsic"` would be an empty
 #:   treatment indistinguishable from the control.
-#: * `demand_forecasting.csv` is byte-identical across v1/v2/v3, so the TFT side
-#:   is unaffected by the switch - only the RL frame changes.
+#: * v4 rebuilt the two pricing features that failed an audit: `competitor_price`
+#:   is now a real cross-store price for the same item rather than the focal
+#:   store's own department median, and `demand_forecast` is the base TFT's
+#:   1-step-ahead prediction rather than a 28-day rolling mean. Inventory columns
+#:   and elasticity carry over from v3 bit-identical, so E1 still describes it.
+#: * `demand_forecasting.csv` is byte-identical across every version, so the TFT
+#:   side is unaffected - only the RL frame changes.
 #: * `base_cover` is the pricer retrained against realistic lead-time inventory
-#:   and is what `edge_system` serves. Pairing v3 data with the stock-blind
-#:   `base` pricer would put the RL arms on data their base never saw.
+#:   and is what `edge_system` serves. Its PPO checkpoint must match the 9-dim
+#:   observation, so it is retrained whenever the state vector changes.
 #:
 #: `base_cover` carries its own calibration.json, so the drift thresholds come
 #: from the matching base rather than from the default one.
-DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "processed_m5_v3"
-DEFAULT_BASE_CKPT = PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_cover"
+DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "processed_m5_v4"
+DEFAULT_BASE_CKPT = PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_v4"
 
 
 def base_paths(ckpt_dir: Path) -> Dict[str, str]:

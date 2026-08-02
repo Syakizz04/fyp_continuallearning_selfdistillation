@@ -497,11 +497,18 @@ class DynamicPricingEnv(gym.Env):
     """
     Discrete-action dynamic pricing environment backed by rl_environment.csv.
 
-    State (13 features):
+    State (9 features):
         [demand_forecast_norm, inventory_norm, competitor_price_norm,
-         day_of_week/6, month/12, is_weekend, is_mega_sale,
-         is_ramadan, is_pre_raya_window, is_pre_cny_window,
-         viral_shock_active, any_shock_active, elasticity_norm]
+         day_of_week/6, month/12, is_weekend, snap, is_event, elasticity_norm]
+
+    This was 13 until an audit measured each slot on the real data. Four -
+    is_pre_raya_window, is_pre_cny_window, viral_shock_active, any_shock_active -
+    were constant zero, being FYP1's Malaysian calendar and synthetic shock
+    generator carried onto Walmart California data. Two more were M5's `snap`
+    and `is_event` renamed to `is_mega_sale` and `is_ramadan` by a config remap.
+    Constant inputs are harmless to a network, but describing a 13-dim state when
+    9 dimensions carry signal is not, so the dead slots are gone and the real
+    ones go by their real names.
 
     Action (Discrete 11):
         Price adjustment tiers from -10% to +10% in 2% increments.
@@ -514,7 +521,7 @@ class DynamicPricingEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    STATE_DIM   = 13
+    STATE_DIM   = 9
 
     def __init__(self, task_df: pd.DataFrame, seed: int = SEED):
         super().__init__()
@@ -543,36 +550,46 @@ class DynamicPricingEnv(gym.Env):
 
     def _precompute(self):
         df = self.df
-        def safe_norm(col, fallback=0.0):
+
+        def column(col, fallback):
+            """Full-length float array for `col`, or `fallback` everywhere.
+
+            NOT `df.get(col, pd.Series(x))`: that fallback is a length-1 Series,
+            so a missing column does not default - it raises IndexError on the
+            second step, once the env indexes past position 0. The failure lands
+            in `_get_obs` at run time rather than at construction, which is the
+            worst place for it.
+            """
             if col not in df.columns:
                 return np.full(len(df), fallback, dtype=np.float32)
-            v = df[col].values.astype(np.float32)
+            return df[col].to_numpy(dtype=np.float32)
+
+        def safe_norm(col, fallback=0.0):
+            v = column(col, fallback)
             m = np.abs(v).max()
             return v / m if m > 0 else v
 
         self._demand_forecast = safe_norm("demand_forecast_norm",  0.5)
         self._inventory       = safe_norm("inventory_norm",        0.5)
         self._comp_price      = safe_norm("competitor_price_norm",  0.5)
-        self._day_of_week     = df.get("day_of_week",  pd.Series(0)).values / 6.0
-        self._month           = df.get("month",         pd.Series(1)).values / 12.0
-        self._is_weekend      = df.get("is_weekend",    pd.Series(0)).values.astype(np.float32)
-        self._is_mega         = df.get("is_mega_sale",  pd.Series(0)).values.astype(np.float32)
-        self._is_ramadan      = df.get("is_ramadan",    pd.Series(0)).values.astype(np.float32)
-        self._is_raya         = df.get("is_pre_raya_window",pd.Series(0)).values.astype(np.float32)
-        self._is_cny          = df.get("is_pre_cny_window", pd.Series(0)).values.astype(np.float32)
-        self._viral           = df.get("viral_shock_active", pd.Series(0)).values.astype(np.float32)
-        self._any_shock       = df.get("any_shock_active",  pd.Series(0)).values.astype(np.float32)
+        self._day_of_week     = column("day_of_week", 0.0) / 6.0
+        self._month           = column("month",       1.0) / 12.0
+        self._is_weekend      = column("is_weekend",  0.0)
+        # Real M5 regime signal, under its own name. `snap` marks SNAP benefit
+        # distribution days, which are a genuine FOODS demand driver (32.9% of
+        # days); `is_event` marks M5 calendar events (8.0%).
+        self._snap            = column("snap",     0.0)
+        self._is_event        = column("is_event", 0.0)
         self._elasticity      = safe_norm("elasticity_coefficient", -1.5)
 
         # Price info
-        self._base_price      = df.get("base_price",      pd.Series(100)).values.astype(np.float32)
-        self._realized_demand = df.get("realized_demand", pd.Series(50)).values.astype(np.float32)
-        self._unit_cost       = df.get("base_price",      pd.Series(50)).values.astype(np.float32) * 0.55
-        self._stockout        = df.get("stockout_flag",   pd.Series(0)).values.astype(np.float32)
+        self._base_price      = column("base_price",      100.0)
+        self._realized_demand = column("realized_demand",  50.0)
+        self._unit_cost       = column("base_price",       50.0) * 0.55
+        self._stockout        = column("stockout_flag",     0.0)
         # RAW inventory, not the normalised observation. Used only when
         # `inventory_constrained` is on - see step().
-        self._inventory_raw   = df.get("inventory_level",
-                                       pd.Series(np.inf)).values.astype(np.float32)
+        self._inventory_raw   = column("inventory_level", np.inf)
 
         if self.inventory_constrained and "inventory_level" in df.columns:
             # Re-scale the inventory OBSERVATION to days of cover.
@@ -660,12 +677,8 @@ class DynamicPricingEnv(gym.Env):
             float(self._day_of_week[idx]),
             float(self._month[idx]),
             self._is_weekend[idx],
-            self._is_mega[idx],
-            self._is_ramadan[idx],
-            self._is_raya[idx],
-            self._is_cny[idx],
-            self._viral[idx],
-            self._any_shock[idx],
+            self._snap[idx],
+            self._is_event[idx],
             self._elasticity[idx],
         ], dtype=np.float32)
 

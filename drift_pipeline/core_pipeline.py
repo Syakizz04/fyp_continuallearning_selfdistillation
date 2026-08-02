@@ -178,12 +178,6 @@ CONFIG = {
         "n_actions"             : 11,
         "policy"                : "MlpPolicy",
         "net_arch"              : [256, 256],
-        # M5 state remap: regime slots in DynamicPricingEnv state are fed by M5
-        # flags instead of the synthetic Malaysia flags (see env adaptation).
-        "state_flag_map": {
-            "is_mega_sale": "snap",        # SNAP day is the FOODS demand regime
-            "is_ramadan"  : "is_event",    # calendar event presence
-        },
     },
 
     # ── CL method hyperparameters ──────────────────────────────────────────
@@ -244,13 +238,20 @@ RL_REQUIRED_COLUMNS = [
     "competitor_price", "base_price", "realized_demand", "stockout_flag",
 ]
 
-# Regime flags DynamicPricingEnv reads into its state vector. M5 lacks the
-# Malaysia ones; build_rl_features materialises all of these as full-length
-# columns so the env's length-1 .get() fallback never triggers an IndexError.
-ENV_REGIME_FLAGS = [
-    "is_mega_sale", "is_ramadan", "is_pre_raya_window",
-    "is_pre_cny_window", "viral_shock_active", "any_shock_active",
-]
+# Regime flags DynamicPricingEnv reads into its state vector.
+#
+# This list used to carry FYP1's Malaysian retail calendar - is_mega_sale,
+# is_ramadan, is_pre_raya_window, is_pre_cny_window - plus two synthetic shock
+# flags, and `build_rl_features` materialised all six on M5 so the env's
+# length-1 `.get()` fallback would not raise. Measured on the real data, four of
+# them were constant zero: 4 of 13 observation slots carried no information at
+# all, and the other two were M5's `snap` and `is_event` wearing Malaysian
+# names. M5 is Walmart California; there is no Raya, no CNY and no viral shock
+# generator.
+#
+# The env now reads M5's own flags under their own names. Two real regime
+# features, honestly labelled, instead of six slots of which four were dead.
+ENV_REGIME_FLAGS = ["snap", "is_event"]
 
 
 def select_required_columns(df: pd.DataFrame, required: List[str], name: str) -> pd.DataFrame:
@@ -277,14 +278,25 @@ def load_and_clean(demand_path: str, rl_path: str) -> Tuple[pd.DataFrame, pd.Dat
     console.print(f"  Demand CSV  : {len(demand_df):,} rows x {demand_df.shape[1]} cols")
     console.print(f"  RL CSV      : {len(rl_df):,} rows x {rl_df.shape[1]} cols")
 
-    demand_df = demand_df.sort_values(["product_id", "region_id", "date"])
-    for col in ["product_id", "region_id", "product_category"]:
+    # Sort/cast only by columns that survived selection. `adapt_config_to_data`
+    # prunes constant features (region_id on a single-store scope) from
+    # CONFIG["forecasting"], and `demand_required_columns()` re-reads CONFIG, so a
+    # SECOND call to this function in the same process gets a narrower frame than
+    # the first. Hardcoding the key list makes that second call a KeyError - which
+    # is what it did to `retrain_pricer --verify`, after the training had already
+    # succeeded.
+    def present(frame, cols):
+        return [c for c in cols if c in frame.columns]
+
+    sort_keys = ["product_id", "region_id", "date"]
+    demand_df = demand_df.sort_values(present(demand_df, sort_keys))
+    for col in present(demand_df, ["product_id", "region_id", "product_category"]):
         if demand_df[col].dtype == object:
             demand_df[col] = demand_df[col].astype("category")
     num_cols = demand_df.select_dtypes(include=[np.number]).columns
     demand_df[num_cols] = demand_df[num_cols].fillna(0)
 
-    rl_df = rl_df.sort_values(["product_id", "region_id", "date"])
+    rl_df = rl_df.sort_values(present(rl_df, sort_keys))
     rl_num = rl_df.select_dtypes(include=[np.number]).columns
     rl_df[rl_num] = rl_df[rl_num].fillna(0)
 
@@ -349,21 +361,12 @@ def build_rl_features(df: pd.DataFrame) -> pd.DataFrame:
     inv_max = df["inventory_level"].max()
     df["inventory_norm"] = df["inventory_level"] / max(inv_max, 1)
 
-    # M5 state remap: feed regime slots from M5 flags so the env state carries
-    # real M5 signal without changing DynamicPricingEnv (which reads via .get()).
-    for slot, src in CONFIG["rl"]["state_flag_map"].items():
-        if src in df.columns:
-            df[slot] = df[src].astype(float)
-
-    # DynamicPricingEnv reads these regime flags via df.get(col, pd.Series(0)) —
-    # that fallback is a length-1 Series, so a *missing* column crashes indexing.
-    # M5 has no Malaysia flags, so materialise every env-read flag as a full-length
-    # float column (0.0 where we have no M5 signal) to keep the env state well-formed.
+    # DynamicPricingEnv reads these via df.get(col, pd.Series(0)) — that fallback
+    # is a length-1 Series, so a missing column crashes indexing rather than
+    # defaulting. Materialise them as full-length float columns. Both are real M5
+    # columns now, so the 0.0 branch should never fire; it stays as a guard.
     for flag in ENV_REGIME_FLAGS:
-        if flag not in df.columns:
-            df[flag] = 0.0
-        else:
-            df[flag] = df[flag].astype(float)
+        df[flag] = df[flag].astype(float) if flag in df.columns else 0.0
     return df
 
 
