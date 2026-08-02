@@ -28,22 +28,47 @@ That is observed data, not a proxy - a real price, set independently, for the
 identical product, with its own promotional calendar. A cross-state store is the
 default so the comparison is not dominated by chain-wide pricing policy.
 
-**demand_forecast** was a trailing 28-day mean of realized demand. Honest and
-correctly lagged, but it is not what a deployed node would price against: the
-node runs a TFT, so the pricer should consume the forecaster's output. The
-replacement is the base TFT's 1-step-ahead prediction.
+## demand_forecast: the architecturally obvious answer, measured and rejected
 
-## The limitation this deliberately keeps
+`demand_forecast` is a trailing 28-day mean of realized demand, correctly lagged.
+The node runs a TFT, so the coherent design is for the pricer to consume the
+forecaster's output, and `--forecast-source tft` does exactly that. It was built,
+measured against the baseline it would replace, and **not adopted**:
 
-The forecast is generated once, by the **base** model, and is identical for every
-CL arm. It is not regenerated as an arm's forecaster drifts. That keeps the RL
-comparison clean - arms differ only in their own CL mechanism, not in the
-environment they inhabit - at the cost that forecaster degradation does not
-propagate into pricing. Wiring the *live* forecaster into the environment is the
-more realistic design and the more confounded one; state it as future work.
+    signal                        MAE    corr     std     bias
+    28-day rolling mean         1.489   0.804   3.892   +0.003
+    TFT h=0                     2.432   0.505   5.202   +0.067
+    TFT mean h=0..6             2.551   0.456   5.072   +0.170
+    TFT mean h=0..13            2.622   0.433   5.170   +0.239
+    (181,412 rows; realized mean 2.375, std 4.681)
 
-Consequence: the first `encoder_length` days of each series have no TFT window
-and keep the old rolling-mean value. Those rows are reported, not hidden.
+The TFT is 63% worse than the moving average, and averaging its horizon makes it
+worse still - so h=0 is already its best output and there is no aggregation that
+rescues it. This is the same fact the walk MASE of ~1.47 reports from the other
+direction: the base forecaster does not beat naive baselines on sparse
+intermittent M5 demand.
+
+Feeding the pricer the worse signal buys architectural tidiness and costs
+accuracy, so the default is `rolling`. The defensible position is the measured
+one: the pricer uses the better of the two signals available to the node, and
+the TFT's weakness at short horizons is reported as a finding rather than buried
+in a feature column.
+
+**This choice cannot confound E2.** Whichever source is used, the forecast is
+generated once and is identical for every CL arm, so it shifts the pricing
+baseline without touching the comparison between arms.
+
+`--forecast-source tft` is kept so the alternative stays one flag away and the
+measurement above is reproducible. Under it, the first `encoder_length` days of
+each series have no encoder window and retain the rolling-mean value; those rows
+are reported, not hidden.
+
+## Related limitation, deliberately not addressed
+
+Neither source is regenerated as an arm's forecaster drifts. Wiring the *live*
+forecaster into the environment would let forecaster degradation propagate into
+pricing - more realistic, and more confounded, since each arm would then inhabit
+a different environment. Future work.
 """
 
 from __future__ import annotations
@@ -70,6 +95,12 @@ DEFAULT_CKPT = PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_cover"
 #: product; different state, so the promotional calendar and local competition
 #: are genuinely distinct rather than a copy of the focal store's policy.
 DEFAULT_COMPETITOR_STORE = "TX_1"
+
+#: `rolling` keeps the 28-day trailing mean; `tft` substitutes the base
+#: forecaster's 1-step-ahead prediction. Rolling by measurement, not by default -
+#: see the docstring table. Only `tft` needs a GPU or a checkpoint.
+FORECAST_SOURCES = ("rolling", "tft")
+DEFAULT_FORECAST_SOURCE = "rolling"
 
 
 # ─── Competitor price ────────────────────────────────────────────────────────
@@ -178,10 +209,11 @@ def tft_one_step_forecast(ckpt_dir: Path, src: Path) -> tuple[pd.DataFrame, Dict
 # ─── Driver ──────────────────────────────────────────────────────────────────
 
 def refresh(src: Path, out: Path, raw_dir: Path, ckpt_dir: Path,
-            store: str) -> Dict:
+            store: str, forecast_source: str = DEFAULT_FORECAST_SOURCE) -> Dict:
     rl = pd.read_csv(src / "rl_environment.csv")
     rl["date"] = pd.to_datetime(rl["date"])
-    stats: Dict = {"n_rows": int(len(rl)), "source": str(src)}
+    stats: Dict = {"n_rows": int(len(rl)), "source": str(src),
+                   "forecast_source": forecast_source}
 
     old_comp = rl["competitor_price"].to_numpy(dtype=float)
     old_fc = rl["demand_forecast"].to_numpy(dtype=float)
@@ -191,18 +223,24 @@ def refresh(src: Path, out: Path, raw_dir: Path, ckpt_dir: Path,
     rl["competitor_price"] = comp
     stats.update(cstats)
 
-    print("  demand_forecast  <- base TFT, 1-step-ahead")
-    fc, fstats = tft_one_step_forecast(ckpt_dir, src)
-    stats.update(fstats)
-    merged = rl[["product_id", "date"]].merge(fc, on=["product_id", "date"],
-                                              how="left")
-    if len(merged) != len(rl):
-        raise ValueError("forecast join changed row count")
-    covered = merged["tft_forecast"].notna()
-    # Rows before the first full encoder window keep the rolling mean rather
-    # than a fabricated value.
-    rl["demand_forecast"] = np.where(covered, merged["tft_forecast"], old_fc)
-    stats["forecast_from_tft_share"] = float(covered.mean())
+    if forecast_source == "tft":
+        print("  demand_forecast  <- base TFT, 1-step-ahead")
+        fc, fstats = tft_one_step_forecast(ckpt_dir, src)
+        stats.update(fstats)
+        merged = rl[["product_id", "date"]].merge(fc, on=["product_id", "date"],
+                                                  how="left")
+        if len(merged) != len(rl):
+            raise ValueError("forecast join changed row count")
+        covered = merged["tft_forecast"].notna()
+        # Rows before the first full encoder window keep the rolling mean rather
+        # than a fabricated value.
+        rl["demand_forecast"] = np.where(covered, merged["tft_forecast"], old_fc)
+        stats["forecast_from_tft_share"] = float(covered.mean())
+    else:
+        # Carried over untouched. Measured as the better signal - see the
+        # docstring table - so this path loads no checkpoint and needs no GPU.
+        print("  demand_forecast  <- 28-day rolling mean (unchanged from source)")
+        stats["forecast_from_tft_share"] = 0.0
 
     out.mkdir(parents=True, exist_ok=True)
     for name in ("demand_forecasting.csv", "elasticity_report.csv"):
@@ -248,6 +286,11 @@ def main(argv=None) -> int:
     ap.add_argument("--raw-dir", type=Path, default=DEFAULT_RAW)
     ap.add_argument("--base-ckpt", type=Path, default=DEFAULT_CKPT)
     ap.add_argument("--competitor-store", default=DEFAULT_COMPETITOR_STORE)
+    ap.add_argument("--forecast-source", choices=FORECAST_SOURCES,
+                    default=DEFAULT_FORECAST_SOURCE,
+                    help="rolling (default, measured as the better signal) keeps "
+                         "the 28-day mean; tft substitutes the base forecaster's "
+                         "1-step-ahead prediction and needs a GPU")
     ap.add_argument("--report-only", action="store_true",
                     help="print the existing dataset's stats and exit")
     args = ap.parse_args(argv)
@@ -263,7 +306,7 @@ def main(argv=None) -> int:
 
     print(f"\nRefreshing pricing features: {args.src.name} -> {args.out.name}\n")
     stats = refresh(args.src, args.out, args.raw_dir, args.base_ckpt,
-                    args.competitor_store)
+                    args.competitor_store, args.forecast_source)
 
     c, f = stats["competitor"], stats["forecast"]
     print(f"\n  competitor_price (store {stats['competitor_store']})")
@@ -273,12 +316,16 @@ def main(argv=None) -> int:
           f" -> {c['ratio_mean_after']:.3f}+/-{c['ratio_std_after']:.3f}")
     print(f"    distinct values       {c['distinct_before']} -> {c['distinct_after']}")
     print(f"    fell back to own price on {stats['rows_fallen_back_to_own_price']:.2%} of rows")
-    print(f"\n  demand_forecast (base TFT, 1-step-ahead)")
+    print(f"\n  demand_forecast ({stats['forecast_source']})")
     print(f"    corr with realized    {f['corr_with_realized_before']:.3f} -> "
           f"{f['corr_with_realized_after']:.3f}")
     print(f"    MAE vs realized       {f['mae_before']:.3f} -> {f['mae_after']:.3f}")
-    print(f"    TFT-covered rows      {stats['forecast_from_tft_share']:.2%} "
-          f"(rest keep the rolling mean: no encoder window yet)")
+    if stats["forecast_source"] == "tft":
+        print(f"    TFT-covered rows      {stats['forecast_from_tft_share']:.2%} "
+              f"(rest keep the rolling mean: no encoder window yet)")
+    else:
+        print("    carried over unchanged - the TFT alternative measured MAE "
+              "2.432 against this signal's 1.489 (see module docstring)")
 
     import json
     (args.out / "refresh_report.json").write_text(json.dumps(stats, indent=2,

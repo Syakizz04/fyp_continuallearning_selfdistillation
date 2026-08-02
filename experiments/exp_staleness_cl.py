@@ -134,11 +134,14 @@ STATIC_ARMS = {"frozen"}
 #:   to 5.1%. `unmet_demand` is the censoring signal, so on the default dataset
 #:   the intrinsic floor is ~0 and `mode="intrinsic"` would be an empty
 #:   treatment indistinguishable from the control.
-#: * v4 rebuilt the two pricing features that failed an audit: `competitor_price`
-#:   is now a real cross-store price for the same item rather than the focal
-#:   store's own department median, and `demand_forecast` is the base TFT's
-#:   1-step-ahead prediction rather than a 28-day rolling mean. Inventory columns
-#:   and elasticity carry over from v3 bit-identical, so E1 still describes it.
+#: * v4 rebuilt `competitor_price`, which an audit found was the focal store's
+#:   own department median - correlated 0.117 with the item's own price, with a
+#:   competitor/own ratio whose std exceeded its mean. It is now the same item's
+#:   real sell_price at TX_1. Everything else, including `demand_forecast`,
+#:   carries over from v3 bit-identical, so E1 still describes this dataset.
+#:   (Replacing `demand_forecast` with the base TFT's output was built and
+#:   measured - MAE 2.432 vs the rolling mean's 1.489 - and rejected. See
+#:   dataset_generator/m5/refresh_rl_features.py.)
 #: * `demand_forecasting.csv` is byte-identical across every version, so the TFT
 #:   side is unaffected - only the RL frame changes.
 #: * `base_cover` is the pricer retrained against realistic lead-time inventory

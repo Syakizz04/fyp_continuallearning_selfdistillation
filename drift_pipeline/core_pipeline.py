@@ -217,11 +217,25 @@ CONFIG = {
 
 # ─── Column contracts (M5) ───────────────────────────────────────────────────
 
+#: Columns that identify a row rather than feed the model. They are loaded
+#: whether or not the model uses them, because `adapt_config_to_data` prunes
+#: CONFIG's feature lists in place and this function re-reads CONFIG: on a
+#: single-store scope it drops `region_id`, so a SECOND `prepare_drift_data()`
+#: call in the same process would load a frame without it and every downstream
+#: join, sort and group-by keyed on it would raise KeyError. That is not
+#: hypothetical - it killed `retrain_pricer --verify` twice, in two different
+#: functions, each time after the training had already succeeded.
+#:
+#: Being pruned from the model's feature lists means "not a feature". It does not
+#: mean "not a column".
+DEMAND_KEY_COLUMNS = ["date", "product_id", "region_id"]
+
+
 def demand_required_columns() -> List[str]:
     """Columns the TFT forecasting pipeline needs (auto-derived from CONFIG)."""
     fc = CONFIG["forecasting"]
     required = (
-        ["date"]
+        DEMAND_KEY_COLUMNS
         + fc["group_ids"]
         + fc["static_categoricals"]
         + [fc["target"]]
