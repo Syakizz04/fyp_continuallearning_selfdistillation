@@ -69,12 +69,22 @@ CONFIG = {
     },
 
     # ── Retraining strategies + reference baselines ────────────────────────
-    # naive dropped: the frozen base model is the metric reference, not naive.
-    "strategies"   : ["ewc", "replay", "sdft"],
-    # periodic dropped for speed: it's the heaviest arm (~24 retrains) and is NOT used
-    # in metric calculation (frozen is the anchor). Re-add "periodic" here to restore
-    # the scheduled-retraining baseline; the on_check_periodic code path is unchanged.
-    "baselines"    : ["frozen"],
+    # EWC removed from the default set: it under-adapted in the first run, which
+    # is what a pull-toward-base-weights regulariser does when the regime has
+    # genuinely changed. The code path is unchanged, so re-adding "ewc" here
+    # restores it.
+    "strategies"   : ["replay", "sdft"],
+    # `frozen` is the metric ANCHOR (the never-retrained reference every delta is
+    # measured against). `naive` is the CONTROL (drift-triggered, no CL
+    # mechanism). These are different jobs and neither substitutes for the other:
+    # without `naive`, an arm that beats `frozen` cannot say whether the win came
+    # from its CL mechanism or merely from retraining at the right moment.
+    #
+    # `periodic` is the mirror control — plain fine-tuning on a fixed schedule,
+    # so it isolates the TRIGGER rather than the mechanism. It is the heaviest arm
+    # (~24 retrains) and is left out by default for runtime; re-add it here to
+    # restore it, the on_check_periodic path is unchanged.
+    "baselines"    : ["frozen", "naive"],
     "retrain": {
         "scope"             : "recent_window+replay",
         "recent_window_weeks": 8,       # data window a triggered retrain trains on

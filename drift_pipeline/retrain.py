@@ -3,10 +3,20 @@
 # Each ARM is an independent walk-forward with its own controller and trigger
 # history:
 #   frozen   — never retrain (lower bound; from Phase 3)
-#   periodic — retrain every N weeks on a fixed schedule (plain fine-tune baseline)
+#   periodic — retrain every N weeks on a fixed schedule (plain fine-tune)
+#   naive    — drift-triggered retrain, NO continual-learning mechanism
 #   ewc      — drift-triggered retrain, EWC-protected
 #   replay   — drift-triggered retrain, replay-augmented
 #   sdft     — drift-triggered retrain, self-distillation
+#
+# `naive` and `periodic` are both plain fine-tuning and differ only in WHEN they
+# fire, which is exactly why both are needed. Against `frozen` alone, a CL arm
+# that wins has two candidate explanations — the CL mechanism worked, or
+# retraining at the right moment worked — and no way to separate them. `naive`
+# shares the trigger with the CL arms and differs only in the mechanism, so it
+# isolates the mechanism; `periodic` shares the mechanism and differs only in the
+# trigger, so it isolates the trigger. Without `naive` the headline comparison
+# cannot attribute its own result.
 #
 # On a forecasting trigger we retrain the TFT on the recent window (reusing BASE
 # normalization so the input space stays fixed); on an RL trigger we continue PPO
@@ -29,6 +39,7 @@ from stable_baselines3 import PPO
 from .core_pipeline import CONFIG, DEVICE, console, slice_by_dates
 from . import base_training as bt
 from . import monitor as mon
+from .memory_accounting import MemoryLog, reset_peak
 
 from hybrid_pipeline.trainers import (
     build_cltft, make_tft_dataset, make_pricing_env, DynamicPricingEnv,
@@ -72,7 +83,8 @@ class ArmStats:
 class RetrainController:
     """Holds the current forecaster/pricer for one arm and retrains them on demand."""
 
-    def __init__(self, strategy: str, base: Dict, data: Dict):
+    def __init__(self, strategy: str, base: Dict, data: Dict,
+                 memlog: Optional[MemoryLog] = None):
         self.strategy = strategy
         self.data = data
         self.train_ds = base["train_ds"]
@@ -80,7 +92,9 @@ class RetrainController:
         self.pricer = base["pricer"]
         self.stats = ArmStats(strategy)
 
-        # CL state (seeded lazily from the base regime on first retrain)
+        # CL state (seeded lazily from the base regime on first retrain).
+        # NOTE for E4: every arm allocates all four, so process RSS cannot
+        # attribute memory to a mechanism — see memory_accounting.
         self.fc_replay = ForecastingReplayBuffer(CONFIG["cl"]["replay_buffer_size"])
         self.rl_buf    = RLReplayBuffer(CONFIG["cl"]["recall_buffer_capacity"])
         self.rl_ewc    = PPOEWCEngine(CONFIG["cl"]["ewc_lambda"])
@@ -92,6 +106,13 @@ class RetrainController:
         self._fc_idx = 0
         self._rl_idx = 0
         self._last_periodic: Optional[pd.Timestamp] = None
+
+        # E4 instrumentation. Always on: a snapshot is a few hundred microseconds
+        # of pointer walking, and making it opt-in would mean the measurement is
+        # missing from exactly the long runs worth measuring. The 'init' snapshot
+        # is the zero point every later event is read against.
+        self.memlog = memlog if memlog is not None else MemoryLog(strategy)
+        self.memlog.snapshot(self, event="init")
 
     # ── providers (what the monitor evaluates at each check) ────────────────
     def forecaster_provider(self):
@@ -107,7 +128,20 @@ class RetrainController:
         # Pad by encoder_length so series have full training sequences.
         start = pd.Timestamp(origin) - pd.Timedelta(weeks=weeks) \
                 - pd.Timedelta(days=fc["encoder_length"])
-        return slice_by_dates(self.data["tft_full"], start, pd.Timestamp(origin))
+        # TRAINING sees what the node observed, which under a sync policy is
+        # sales rather than demand. Evaluation keeps using the uncensored
+        # `tft_full` via the monitor - see drift_pipeline/censoring.py. Absent
+        # the censored key this is the uncensored control, by design.
+        source = self.data.get("tft_full_censored", self.data["tft_full"])
+        return slice_by_dates(source, start, pd.Timestamp(origin))
+
+    def _base_tft(self) -> pd.DataFrame:
+        """Base-regime frame used to seed EWC Fisher and the replay buffer.
+
+        Also censored: the protections are supposed to preserve what the node
+        actually learned, not a truth it never saw.
+        """
+        return self.data.get("tft_base_censored", self.data["tft_base"])
 
     def _recent_rl(self, origin) -> pd.DataFrame:
         weeks = CONFIG["retrain"]["recent_window_weeks"]
@@ -155,18 +189,20 @@ class RetrainController:
         loader = self._fc_loader(df)
         model = self.forecaster
         strat = self.strategy
+        # Peak VRAM is reported per-retrain, not cumulatively — see reset_peak.
+        reset_peak()
 
         if strat == "ewc":
             model.cl_method = "ewc"
             if not self._fc_ewc_seeded:    # anchor on base regime
-                base_loader = self._fc_loader(self.data["tft_base"])
+                base_loader = self._fc_loader(self._base_tft())
                 model.compute_and_store_fisher(base_loader, CONFIG["cl"]["ewc_fisher_samples"])
                 self._fc_ewc_seeded = True
             train_loader = loader
         elif strat == "replay":
             model.cl_method = "replay"
             if not self._fc_replay_seeded:
-                base_loader = self._fc_loader(self.data["tft_base"])
+                base_loader = self._fc_loader(self._base_tft())
                 self.fc_replay.add_from_loader(base_loader, task_id=0)
                 self._fc_replay_seeded = True
             train_loader = (_MixedLoader(loader, self.fc_replay, CONFIG["cl"]["replay_mix_ratio"])
@@ -175,7 +211,7 @@ class RetrainController:
             model.cl_method = "sdft"
             self._set_fc_teacher()         # freeze pre-drift model as teacher
             train_loader = loader
-        else:                               # periodic / plain fine-tune
+        else:                               # naive / periodic — plain fine-tune
             model.cl_method = "naive"
             train_loader = loader
 
@@ -195,6 +231,10 @@ class RetrainController:
         self.stats.retrain_log.append(
             {"date": str(pd.Timestamp(origin).date()), "model": "forecasting",
              "strategy": strat, "reason": reason, "window_rows": int(len(df))})
+        # After the protections have been accumulated for the NEXT retrain, so
+        # the row reflects what this arm is now carrying forward.
+        self.memlog.snapshot(self, event=f"retrain_fc_{reason}", date=origin,
+                             model_type="forecasting")
 
     # ── RL retrain ──────────────────────────────────────────────────────────
     def retrain_pricer(self, origin, reason: str):
@@ -205,6 +245,7 @@ class RetrainController:
         model = self.pricer
         model.set_env(env)
         strat = self.strategy
+        reset_peak()
         steps = CONFIG["retrain"]["retrain_timesteps"]
         fisher_steps = CONFIG["cl"]["ewc_fisher_samples"] * 5
         cbs = []
@@ -243,6 +284,8 @@ class RetrainController:
         self.stats.retrain_log.append(
             {"date": str(pd.Timestamp(origin).date()), "model": "rl",
              "strategy": strat, "reason": reason, "window_rows": int(len(df))})
+        self.memlog.snapshot(self, event=f"retrain_rl_{reason}", date=origin,
+                             model_type="rl")
 
     # ── hooks wired into the monitor ────────────────────────────────────────
     def on_trigger(self, kind, origin, ctx):
@@ -270,12 +313,20 @@ class RetrainController:
 
 # ─── Arm orchestration ───────────────────────────────────────────────────────
 
+#: Arms that retrain when the drift detector fires. `naive` belongs here despite
+#: having no CL mechanism: it is the control that holds the trigger fixed so the
+#: mechanism is the only thing varying. The retrain dispatch already routes
+#: anything unrecognised to plain fine-tuning (`cl_method = "naive"`), so adding
+#: it needed no new training path — only the trigger it was never wired to.
+DRIFT_TRIGGERED = ("naive", "ewc", "replay", "sdft")
+
+
 def run_arm(strategy: str, data: Dict, base: Optional[Dict] = None) -> Dict:
     """Run one arm end-to-end. Loads a FRESH base (isolation) unless given one."""
     base = base or mon.load_base()
     ctrl = RetrainController(strategy, base, data)
 
-    on_trigger = ctrl.on_trigger if strategy in ("ewc", "replay", "sdft") else None
+    on_trigger = ctrl.on_trigger if strategy in DRIFT_TRIGGERED else None
     on_check   = ctrl.on_check_periodic if strategy == "periodic" else None
 
     res = mon.walk_forward(
@@ -297,6 +348,19 @@ def run_arm(strategy: str, data: Dict, base: Optional[Dict] = None) -> Dict:
         "events": ctrl.stats.retrain_log,
     }, indent=2))
     paths["retrain_log"] = str(log_path)
+
+    # E4: one row per (event, component). Written per arm rather than once at
+    # the end so a run that dies on arm 3 still leaves arms 1-2 measured.
+    mem_path = ctrl.memlog.save(
+        Path(CONFIG["paths"]["results"]) / f"memory_{strategy}.csv")
+    paths["memory_log"] = str(mem_path)
+
+    peak = ctrl.memlog.summary()
+    if not peak.empty:
+        cl_peak = peak.loc[peak["component"] == "cl_state_total", "peak_mb"]
+        if len(cl_peak):
+            console.print(f"    [cyan]CL state peak[/cyan]: "
+                          f"{float(cl_peak.iloc[0]):.1f} MB")
 
     console.print(f"[green]✓ arm '{strategy}'[/green]: "
                   f"{ctrl.stats.n_fc_retrains} FC + {ctrl.stats.n_rl_retrains} RL retrains  "
