@@ -21,6 +21,8 @@ import view_home             # noqa: E402
 import view_initial          # noqa: E402
 import view_drift            # noqa: E402
 import view_cross            # noqa: E402
+import view_live             # noqa: E402
+import view_health           # noqa: E402
 
 st.set_page_config(
     page_title="Continual learning under regime shift",
@@ -30,11 +32,23 @@ st.set_page_config(
 )
 st.markdown(T.CSS, unsafe_allow_html=True)
 
-pages = [
-    st.Page(view_home.render, title="Overview", url_path="overview", default=True),
-    st.Page(view_initial.render, title="Synthetic pipeline", url_path="synthetic"),
-    st.Page(view_drift.render, title="Drift pipeline", url_path="drift"),
-    st.Page(view_cross.render, title="Replay vs SDFT", url_path="ablation"),
-]
-nav = st.navigation(pages, position="sidebar")
+# Grouped so the deployed system reads as a separate half of the work from the
+# offline results, rather than as two more result pages.
+nav = st.navigation(
+    {
+        "Results": [
+            st.Page(view_home.render, title="Overview", url_path="overview",
+                    default=True),
+            st.Page(view_initial.render, title="Synthetic pipeline",
+                    url_path="synthetic"),
+            st.Page(view_drift.render, title="Drift pipeline", url_path="drift"),
+            st.Page(view_cross.render, title="Replay vs SDFT", url_path="ablation"),
+        ],
+        "Deployed system": [
+            st.Page(view_live.render, title="Live operations", url_path="live"),
+            st.Page(view_health.render, title="Model health", url_path="health"),
+        ],
+    },
+    position="sidebar",
+)
 nav.run()
