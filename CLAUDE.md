@@ -4,7 +4,72 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Final Year Project comparing continual-learning (CL) methods on two model types — **demand forecasting** (Temporal Fusion Transformer) and **RL-based dynamic pricing** (PPO) — over a 6-task sequence built from a synthetic Malaysian e-commerce dataset. The research question is catastrophic forgetting: tasks alternate baseline ↔ mega-sale regimes, and SDFT (self-distillation) is the proposed method benchmarked against naive fine-tuning, EWC, and replay/RECALL.
+Final Year Project on **continual learning (CL)** for two model types — **demand
+forecasting** (Temporal Fusion Transformer) and **RL-based dynamic pricing**
+(PPO). The research question throughout is catastrophic forgetting, and SDFT
+(self-distillation) is the proposed method.
+
+**Continual learning is the contribution. Everything else is apparatus.** The
+deployed system, the inventory sync service and the simulation driver exist to
+*generate the conditions* under which the CL methods are compared — their
+correctness is a precondition, not a result. When a change has to trade off
+between "better system" and "cleaner comparison," the comparison wins.
+
+What makes the CL setting non-standard is that the label corruption is
+**endogenous**. A node that refuses an order it cannot see stock for never
+records the demand, so the forecaster retrains on an understated target; it then
+under-orders, causing more refusals. The learner generates its own corruption and
+the corruption feeds back. Standard CL benchmarks hand you clean labels and
+explicit task boundaries; here both are absent, and the sync policy is the dial
+that sets the severity.
+
+The domain is **omnichannel retail**: a physical till, an online storefront and a
+marketplace listing selling from one shared stock pool per SKU. Not pure
+e-commerce — the primary dataset is Walmart store data, so a dominant in-store
+channel is the correct shape.
+
+It splits into two halves, and **which one a request refers to matters** because
+they use different data and different packages:
+
+- **FYP1 — offline batch experiments.** `initial_pipeline/` and
+  `hybrid_pipeline/`, over a 6-task sequence built from a *synthetic Malaysian
+  e-commerce* dataset (`dataset_generator/synthetic_data/`). Tasks alternate
+  baseline ↔ mega-sale regimes; SDFT is benchmarked against naive fine-tuning,
+  EWC, and replay/RECALL. This is done — the results are the evidence base and
+  the datasets/packages here are historical.
+- **FYP2 — the deployed edge–cloud system.** `drift_pipeline/`, `edge_system/`
+  and `experiments/`, over **real M5 Walmart data** (`data/processed_m5_v3/`).
+  Nodes run TFT + PPO inference locally, detect drift locally, and retrain
+  locally via SDFT, syncing only inventory state and model metadata. Inventory
+  sync error is treated as a controllable source of non-stationarity. This is the
+  active work.
+
+"Synthetic Malaysian e-commerce" describes FYP1's dataset only. FYP2 does not use
+it.
+
+## FYP2 experiments and what each one is for
+
+Ranked by what they contribute to the CL argument, not by number. Only E2 is a
+headline claim; the rest exist to make it attributable or to survive its failure.
+
+| exp | script | role |
+|---|---|---|
+| **E2** | `experiments/exp_staleness_cl.py` | **The experiment.** Sweeps censoring × arm and asks whether replay-free SDFT forgets less than replay when the training signal is corrupted. Read on `forgetting_mase_base_era`, not on walk MASE. |
+| **E4** | `experiments/exp_memory.py` | **The floor.** Measures what each CL structure costs in bytes. Replay is ~706× the model; SDFT's teacher is 1×. This argues the replay-free premise *regardless of how E2 lands*, which is why it is worth having. |
+| **E1** | `experiments/exp_sync.py` | **Manipulation check**, not a result. Establishes that the sync policy dial has the range it claims (fill 82.7% vs 71.7%) — those measured fill rates are exactly what E2 uses as its treatment levels. |
+| **E3** | (elasticity ablation) | Robustness check on the pricing side: old vs re-grounded elasticity. |
+| — | `experiments/exp_synthetic_audit.py` | Honesty audit of the synthetic layer. Its finding — elasticity is ~71% prior, 29% data — is why E2's treatment runs through **censoring** (real M5 units) rather than through the price channel. |
+
+**Arms and their jobs.** `frozen` is the metric *anchor* (never retrains; every
+delta is measured against it). `naive` is the *control* (same drift trigger, no CL
+mechanism) — it isolates the mechanism. `periodic` is the mirror control (same
+mechanism, fixed schedule) — it isolates the trigger. `replay` and `sdft` are the
+comparison. EWC is out of the default set: it under-adapted, which is what a
+pull-toward-base-weights regulariser does when the regime genuinely changed.
+
+Dropping `naive` is the tempting saving and it is the one that breaks the
+argument — without it, an arm that beats `frozen` cannot say whether its CL
+mechanism helped or whether retraining at the right moment did.
 
 ## Commands
 
