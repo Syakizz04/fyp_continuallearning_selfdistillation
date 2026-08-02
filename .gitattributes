@@ -1,0 +1,4 @@
+# Shell scripts must keep LF even when checked out on Windows. A CRLF copy fails
+# on Linux with "bad interpreter: ^M", which is how experiments/run_e2.sh would
+# break on a rented box.
+*.sh text eol=lf
