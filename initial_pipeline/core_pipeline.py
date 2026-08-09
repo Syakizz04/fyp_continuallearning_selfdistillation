@@ -6,8 +6,14 @@ import os
 import random
 import logging
 import warnings
+import faulthandler
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+# Dump a native (C-level) traceback on a hard crash / segfault (e.g. Windows
+# access violation 0xC0000005). Helps locate native crashes in torch/cuDNN that
+# bypass Python exceptions. Harmless; only installs signal handlers.
+faulthandler.enable()
 
 import numpy as np
 import pandas as pd
@@ -413,7 +419,13 @@ def configure_vast_ai(
         CONFIG["paths"]["plots"] = str(out_path / "plots")
 
     CONFIG["hardware"]["device"] = DEVICE
-    CONFIG["hardware"]["precision"] = "32"
+    # Prefer bf16-mixed on GPUs that support it (Ampere+) for speed and lower
+    # VRAM; fall back to fp32 otherwise. Do NOT use 16-mixed (fp16): the large
+    # mega-sale demand values overflow fp16's ~65504 range.
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        CONFIG["hardware"]["precision"] = "bf16-mixed"
+    else:
+        CONFIG["hardware"]["precision"] = "32"
     CONFIG["hardware"]["compile"] = os.environ.get("FYP_TORCH_COMPILE", "0") == "1"
     CONFIG["hardware"]["pin_memory"] = torch.cuda.is_available()
 

@@ -297,7 +297,17 @@ class CLTFT(TemporalFusionTransformer):
         elif self.cl_method == "sdft" and self.teacher is not None:
             alpha   = self.cl_cfg["sdft_alpha"]
             distill = self._sdft_loss(batch)
-            self.log("sdft_penalty", distill.detach(), prog_bar=False, on_step=True)
+            base    = step_output["loss"] if isinstance(step_output, dict) else step_output
+            # Log both terms on the SAME scale so the historical scale-trap is
+            # visible if it ever recurs: the distillation MSE used to run on raw
+            # demand units (~1e4–1e5) and silently swamp the QuantileLoss task term
+            # (~1e1), making the alpha blend a no-op. _sdft_loss now normalizes, so
+            # sdft_distill_ratio should sit near O(1) rather than O(1e3).
+            self.log("sdft_task_loss",     base.detach(),    prog_bar=False, on_step=True)
+            self.log("sdft_distill",       distill.detach(), prog_bar=False, on_step=True)
+            self.log("sdft_distill_ratio",
+                     distill.detach() / base.detach().abs().clamp_min(1e-8),
+                     prog_bar=False, on_step=True)
             # Convex blend: alpha * task_loss + (1 - alpha) * distillation.
             # The task loss must actually be scaled by alpha — super() returns it
             # unweighted, so this is where the SDFT trade-off is really applied.
@@ -385,10 +395,32 @@ class CLTFT(TemporalFusionTransformer):
         console.print(f"  [cyan]Fisher computed over {count} batches[/cyan]")
 
     # ── SDFT: self-distillation loss ───────────────────────────────────────
+    def _normalize_prediction(self, pred: torch.Tensor, x) -> torch.Tensor:
+        """Map a raw-scale prediction back into normalized target space using the
+        per-series ``target_scale`` (center, spread) carried in the batch.
+
+        ``_prediction_from_output`` returns predictions de-normalized to raw demand
+        units (RMSE ~300–2600), so an MSE taken on them lands at ~1e4–1e5 and
+        swamps the QuantileLoss task term (~1e1). Re-applying the target scale puts
+        the distillation MSE back in the O(1) space the network/loss operate in, so
+        the SDFT alpha blend is actually meaningful."""
+        scale = x.get("target_scale") if isinstance(x, dict) else None
+        if not torch.is_tensor(scale):
+            # No usable scale (e.g. multi-target list): standardize by the tensor's
+            # own spread so the term is still O(1) rather than raw-scale.
+            return pred / pred.detach().std().clamp_min(1e-6)
+        center = scale[..., 0]
+        spread = scale[..., 1].clamp_min(1e-6)
+        while center.dim() < pred.dim():        # (B,) -> (B, 1, 1) to broadcast
+            center = center.unsqueeze(-1)
+            spread = spread.unsqueeze(-1)
+        return (pred - center) / spread
+
     def _sdft_loss(self, batch) -> torch.Tensor:
-        """Raw self-distillation term: MSE between student and frozen-teacher
-        predictions. No temperature — for MSE regression a temperature is just a
-        constant rescaling (MSE(a/T, b/T) = MSE(a, b)/T^2) and changes nothing.
+        """Self-distillation term: MSE between student and frozen-teacher
+        predictions, computed in NORMALIZED target space (see
+        ``_normalize_prediction``) so it is scale-matched to the QuantileLoss task
+        term. No temperature — for MSE a temperature is just a constant rescaling.
         No alpha here either; the convex blend is applied by the caller in
         training_step so the task loss is genuinely weighted by alpha."""
         x, y = batch
@@ -403,7 +435,9 @@ class CLTFT(TemporalFusionTransformer):
         s_out  = self(x_dev)
         s_pred = self._prediction_from_output(s_out)
 
-        return F.mse_loss(s_pred, t_pred.detach())
+        s_norm = self._normalize_prediction(s_pred, x_dev)
+        t_norm = self._normalize_prediction(t_pred, x_dev)
+        return F.mse_loss(s_norm, t_norm.detach())
 
     def store_teacher(self):
         """Store a frozen deep copy of self as the teacher for next task."""
@@ -796,6 +830,45 @@ def compute_bwt_fwt(
     return bwt, fwt
 
 
+def compute_forgetting(
+    perf_matrix: np.ndarray,
+    primary_is_higher_better: bool = True,
+) -> Tuple[float, float]:
+    """
+    Compute total and average forgetting across previous tasks.
+
+    Forgetting is positive when the final model is worse than its best earlier
+    score on an eval task. For lower-is-better metrics this is
+    final_error - best_previous_error. For higher-is-better metrics this is
+    best_previous_score - final_score. Each per-task value is clamped at >= 0.
+    """
+    T = perf_matrix.shape[0]
+    if T < 2:
+        return 0.0, 0.0
+
+    forgetting_vals = []
+    for eval_idx in range(T - 1):
+        previous_scores = perf_matrix[eval_idx:T - 1, eval_idx]
+        previous_scores = previous_scores[~np.isnan(previous_scores)]
+        final_score = perf_matrix[T - 1, eval_idx]
+
+        if previous_scores.size == 0 or np.isnan(final_score):
+            continue
+
+        if primary_is_higher_better:
+            best_previous = float(np.max(previous_scores))
+            forgetting = best_previous - float(final_score)
+        else:
+            best_previous = float(np.min(previous_scores))
+            forgetting = float(final_score) - best_previous
+
+        forgetting_vals.append(max(0.0, forgetting))
+
+    total_forgetting = float(np.sum(forgetting_vals)) if forgetting_vals else 0.0
+    avg_forgetting = float(np.mean(forgetting_vals)) if forgetting_vals else 0.0
+    return total_forgetting, avg_forgetting
+
+
 
 
 # ─── Cell: Shared CL Engines (EWC, Replay, SDFT) ─────────────────────────────
@@ -1034,6 +1107,14 @@ class ResultsLogger:
             })
 
     def to_dataframe(self) -> pd.DataFrame:
+        if self._records:
+            return pd.DataFrame(self._records)
+        # Fallback: reload a previously saved run from disk so analysis works in a
+        # fresh kernel. Point CONFIG["paths"]["results"] at the run first (e.g. via
+        # configure_vast_ai(output_dir=...)).
+        csv_path = Path(CONFIG["paths"]["results"]) / "all_metrics.csv"
+        if csv_path.exists():
+            return pd.read_csv(csv_path)
         return pd.DataFrame(self._records)
 
     def save(self, path: str = None):

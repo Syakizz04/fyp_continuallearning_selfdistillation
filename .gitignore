@@ -4,6 +4,29 @@ __pycache__/
 
 outputs/
 
+# Datasets. Large and fully regenerable: data/m5_raw comes from the Kaggle
+# competition, and everything under data/processed_m5* is rebuilt by
+# dataset_generator.m5.build_m5 / rebuild_inventory. data/external_pricing is
+# the 811 MB dunnhumby download - only the fitted prior.json is worth keeping,
+# and it is small enough to re-fit.
+data/
+
+# Model artefacts (also covered by outputs/, kept for safety).
+*.ckpt
+*.pkl
+*.zip
+
+# Scratch and personal working files.
+_real_run.py
+_wiring_check.py
+viva_script.txt
+dashboard_script.txt
+*.pdf
+agent-skills/
+
 dataset_generator/synthetic_data/output/
 
 .ipynb_checkpoints/
+
+# TensorBoard output from Lightning fits (smoke runs, retrains)
+lightning_logs/

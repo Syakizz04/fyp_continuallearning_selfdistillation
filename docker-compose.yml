@@ -1,0 +1,33 @@
+# Redis only.
+#
+# The edge nodes deliberately do NOT run in containers: they retrain with SDFT on
+# a single RTX 3050 4 GB, and sharing that GPU across containers on Windows
+# (WSL2 + nvidia-container-toolkit + VRAM contention) costs real effort for no
+# research gain. "Edge" here means inference runs locally in-process, which
+# native processes satisfy directly.
+#
+#   docker compose up -d redis     # start
+#   docker compose down            # stop
+#   docker compose down -v         # stop and wipe the pool
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: fyp-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

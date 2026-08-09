@@ -1,0 +1,17 @@
+{
+  "k=1.5": {
+    "threshold": 1.0481111159139602,
+    "n_triggers": 0,
+    "dates": []
+  },
+  "k=2.0": {
+    "threshold": 1.0530224041067342,
+    "n_triggers": 0,
+    "dates": []
+  },
+  "k=2.5": {
+    "threshold": 1.057933692299508,
+    "n_triggers": 0,
+    "dates": []
+  }
+}

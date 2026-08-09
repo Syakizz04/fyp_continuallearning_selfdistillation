@@ -1,4 +1,26 @@
-# Training components for the FYP continual-learning experiment.
+"""
+Model and continual-learning machinery for the deployed FYP2 system.
+
+Vendored from `hybrid_pipeline/trainers.py` (plus the three PPO callbacks that
+lived in `hybrid_pipeline/experiment_runner.py`) so that `drift_pipeline` and
+`edge_system` are self-contained. Before this, the entire FYP2 stack imported
+its engine from an FYP1 *variant* package that FYP1 itself did not use - the
+dependency ran backwards, and a config-syncing shim existed only to reconcile
+the two packages' separate CONFIG dicts.
+
+The code is a deliberate byte-level copy, not a rewrite: the base checkpoints in
+`outputs/drift/checkpoints/` were trained by it, and `build_cltft` has to
+reconstruct exactly that architecture for `base_tft.ckpt` to load. Changing
+anything here risks silently failing to restore the base model.
+
+Dropped as unused by FYP2: `compute_bwt_fwt` / `compute_forgetting` (drift has
+its own `metrics.py`), and `ResultsLogger` / `CheckpointManager` (the drift
+pipeline writes its own long-form CSVs).
+
+The one substantive change is the config source. This module now reads
+`drift_pipeline.core_pipeline.CONFIG` directly, so `base_training.sync_config()`
+no longer has to copy drift's config into hybrid's before every call.
+"""
 
 import copy
 import random
@@ -26,8 +48,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
 
-from .core_pipeline import CONFIG, DEVICE, SEED, ckpt_path, console
-
+from .core_pipeline import CONFIG, DEVICE, SEED, console
 
 # ─── Cell: PyTorch Forecasting TimeSeriesDataSet Builder ─────────────────────
 from pytorch_forecasting.data import GroupNormalizer
@@ -476,11 +497,18 @@ class DynamicPricingEnv(gym.Env):
     """
     Discrete-action dynamic pricing environment backed by rl_environment.csv.
 
-    State (13 features):
+    State (9 features):
         [demand_forecast_norm, inventory_norm, competitor_price_norm,
-         day_of_week/6, month/12, is_weekend, is_mega_sale,
-         is_ramadan, is_pre_raya_window, is_pre_cny_window,
-         viral_shock_active, any_shock_active, elasticity_norm]
+         day_of_week/6, month/12, is_weekend, snap, is_event, elasticity_norm]
+
+    This was 13 until an audit measured each slot on the real data. Four -
+    is_pre_raya_window, is_pre_cny_window, viral_shock_active, any_shock_active -
+    were constant zero, being FYP1's Malaysian calendar and synthetic shock
+    generator carried onto Walmart California data. Two more were M5's `snap`
+    and `is_event` renamed to `is_mega_sale` and `is_ramadan` by a config remap.
+    Constant inputs are harmless to a network, but describing a 13-dim state when
+    9 dimensions carry signal is not, so the dead slots are gone and the real
+    ones go by their real names.
 
     Action (Discrete 11):
         Price adjustment tiers from -10% to +10% in 2% increments.
@@ -493,7 +521,7 @@ class DynamicPricingEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    STATE_DIM   = 13
+    STATE_DIM   = 9
 
     def __init__(self, task_df: pd.DataFrame, seed: int = SEED):
         super().__init__()
@@ -501,6 +529,14 @@ class DynamicPricingEnv(gym.Env):
         self.n_steps = len(self.df)
         self._seed   = seed
         self.price_tiers = list(CONFIG["rl"]["price_tiers"])
+
+        # Off by default: turning it on changes the reward, so FYP1's RL numbers
+        # would no longer be comparable. Read from CONFIG at construction time so
+        # a scenario can enable it the same way everything else is configured.
+        self.inventory_constrained = bool(
+            CONFIG["rl"].get("inventory_constrained", False))
+        self.lost_sale_penalty = float(
+            CONFIG["rl"].get("lost_sale_penalty", 0.5))
 
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
@@ -514,32 +550,74 @@ class DynamicPricingEnv(gym.Env):
 
     def _precompute(self):
         df = self.df
-        def safe_norm(col, fallback=0.0):
+
+        def column(col, fallback):
+            """Full-length float array for `col`, or `fallback` everywhere.
+
+            NOT `df.get(col, pd.Series(x))`: that fallback is a length-1 Series,
+            so a missing column does not default - it raises IndexError on the
+            second step, once the env indexes past position 0. The failure lands
+            in `_get_obs` at run time rather than at construction, which is the
+            worst place for it.
+            """
             if col not in df.columns:
                 return np.full(len(df), fallback, dtype=np.float32)
-            v = df[col].values.astype(np.float32)
+            return df[col].to_numpy(dtype=np.float32)
+
+        def safe_norm(col, fallback=0.0):
+            v = column(col, fallback)
             m = np.abs(v).max()
             return v / m if m > 0 else v
 
         self._demand_forecast = safe_norm("demand_forecast_norm",  0.5)
         self._inventory       = safe_norm("inventory_norm",        0.5)
         self._comp_price      = safe_norm("competitor_price_norm",  0.5)
-        self._day_of_week     = df.get("day_of_week",  pd.Series(0)).values / 6.0
-        self._month           = df.get("month",         pd.Series(1)).values / 12.0
-        self._is_weekend      = df.get("is_weekend",    pd.Series(0)).values.astype(np.float32)
-        self._is_mega         = df.get("is_mega_sale",  pd.Series(0)).values.astype(np.float32)
-        self._is_ramadan      = df.get("is_ramadan",    pd.Series(0)).values.astype(np.float32)
-        self._is_raya         = df.get("is_pre_raya_window",pd.Series(0)).values.astype(np.float32)
-        self._is_cny          = df.get("is_pre_cny_window", pd.Series(0)).values.astype(np.float32)
-        self._viral           = df.get("viral_shock_active", pd.Series(0)).values.astype(np.float32)
-        self._any_shock       = df.get("any_shock_active",  pd.Series(0)).values.astype(np.float32)
+        self._day_of_week     = column("day_of_week", 0.0) / 6.0
+        self._month           = column("month",       1.0) / 12.0
+        self._is_weekend      = column("is_weekend",  0.0)
+        # Real M5 regime signal, under its own name. `snap` marks SNAP benefit
+        # distribution days, which are a genuine FOODS demand driver (32.9% of
+        # days); `is_event` marks M5 calendar events (8.0%).
+        self._snap            = column("snap",     0.0)
+        self._is_event        = column("is_event", 0.0)
         self._elasticity      = safe_norm("elasticity_coefficient", -1.5)
 
         # Price info
-        self._base_price      = df.get("base_price",      pd.Series(100)).values.astype(np.float32)
-        self._realized_demand = df.get("realized_demand", pd.Series(50)).values.astype(np.float32)
-        self._unit_cost       = df.get("base_price",      pd.Series(50)).values.astype(np.float32) * 0.55
-        self._stockout        = df.get("stockout_flag",   pd.Series(0)).values.astype(np.float32)
+        self._base_price      = column("base_price",      100.0)
+        self._realized_demand = column("realized_demand",  50.0)
+        self._unit_cost       = column("base_price",       50.0) * 0.55
+        self._stockout        = column("stockout_flag",     0.0)
+        # RAW inventory, not the normalised observation. Used only when
+        # `inventory_constrained` is on - see step().
+        self._inventory_raw   = column("inventory_level", np.inf)
+
+        if self.inventory_constrained and "inventory_level" in df.columns:
+            # Re-scale the inventory OBSERVATION to days of cover.
+            #
+            # `safe_norm` divides by the maximum across the whole frame, which is
+            # the largest stock level of the busiest SKU. On this panel that is
+            # 205 units, so a slow-moving SKU sitting on 1, 2 or 3 units maps to
+            # 0.005, 0.010, 0.015 - indistinguishable to the network, and those
+            # are precisely the states where stock should change the price. The
+            # measured symptom was an agent that responded to inventory LEAST
+            # when stock was scarcest (0% of decisions at under 2 days of cover,
+            # against 6% when stock was ample).
+            #
+            # Days of cover is the scale the decision actually turns on: "two
+            # days left" means the same thing for a fast and a slow SKU, whereas
+            # "ten units" does not. Clipped at two weeks, beyond which more stock
+            # makes no difference to a pricing decision.
+            mean_d = (df.groupby("product_id")["realized_demand"].transform("mean")
+                      if "product_id" in df.columns
+                      else pd.Series(df["realized_demand"].mean(), index=df.index))
+            self._mean_demand = np.maximum(
+                mean_d.to_numpy(dtype=np.float32), 1e-6).astype(np.float32)
+            cover = (df["inventory_level"].to_numpy(dtype=np.float32)
+                     / self._mean_demand)
+            self._inventory = np.clip(cover / self.COVER_CLIP_DAYS,
+                                      0.0, 1.0).astype(np.float32)
+        else:
+            self._mean_demand = None
 
         # Oracle best reward per step, precomputed once and vectorized over price
         # tiers. The oracle depends only on the data (not the policy), so there is
@@ -550,8 +628,46 @@ class DynamicPricingEnv(gym.Env):
         ratio   = price / base_p                                           # (N,T)
         demand  = np.maximum(self._realized_demand, 0.0)[:, None]          # (N,1)
         adj     = demand * np.power(ratio, self._elasticity[:, None])      # (N,T)
-        profit  = (price - self._unit_cost[:, None]) * np.maximum(0.0, adj)  # (N,T)
+        adj     = np.maximum(0.0, adj)
+        if self.inventory_constrained:
+            # The oracle must face the same constraint as the policy, or regret
+            # and profit_index are measured against an unreachable benchmark.
+            stock = self._inventory_raw[:, None]
+            sold  = np.minimum(adj, stock)
+            lost  = adj - sold
+            profit = ((price - self._unit_cost[:, None]) * sold
+                      - self.lost_sale_penalty * price * lost)
+        else:
+            profit = (price - self._unit_cost[:, None]) * adj              # (N,T)
         self._opt_reward = (profit.max(axis=1) / 1000.0).astype(np.float32)  # (N,)
+
+    #: Stock beyond this many days of cover makes no difference to a price.
+    COVER_CLIP_DAYS = 14.0
+
+    def inventory_obs(self, idx: int, inventory_level: float) -> float:
+        """
+        Map a RAW stock level onto this row's inventory observation slot.
+
+        Exposed so a serving process can substitute a different stock figure -
+        a node's stale belief, say - without having to reconstruct the
+        normalisation. Reconstructing it is how the served observation and the
+        trained one drift apart, and under the cover-based scaling it is not even
+        possible to invert from a single row, because the divisor is per-SKU.
+        """
+        if self._mean_demand is not None:
+            cover = inventory_level / float(self._mean_demand[idx])
+            return float(np.clip(cover / self.COVER_CLIP_DAYS, 0.0, 1.0))
+        # Legacy path: inventory was normalised twice (global max in
+        # build_rl_features, then this frame's max), so recover the composite
+        # divisor empirically from a row where the normalised value is non-zero.
+        raw = self._inventory_raw
+        norm = np.asarray(self._inventory, dtype=float)
+        usable = np.flatnonzero((norm > 0) & np.isfinite(norm) & (raw > 0))
+        if not len(usable):
+            return 0.0
+        i = int(usable[0])
+        scale = float(raw[i] / norm[i])
+        return float(inventory_level / scale) if scale else 0.0
 
     def _get_obs(self, idx: int) -> np.ndarray:
         return np.array([
@@ -561,12 +677,8 @@ class DynamicPricingEnv(gym.Env):
             float(self._day_of_week[idx]),
             float(self._month[idx]),
             self._is_weekend[idx],
-            self._is_mega[idx],
-            self._is_ramadan[idx],
-            self._is_raya[idx],
-            self._is_cny[idx],
-            self._viral[idx],
-            self._any_shock[idx],
+            self._snap[idx],
+            self._is_event[idx],
             self._elasticity[idx],
         ], dtype=np.float32)
 
@@ -589,11 +701,42 @@ class DynamicPricingEnv(gym.Env):
         adj_demand  = base_demand * (price_ratio ** elasticity)
         adj_demand  = max(0.0, round(adj_demand))
 
-        # Revenue & profit
-        revenue       = price * adj_demand
-        profit_margin = (price - cost) * adj_demand
-        stockout      = float(self._stockout[idx])
-        stockout_pen  = 0.15 * revenue * stockout
+        if self.inventory_constrained:
+            # Sales are capped by stock on hand, and demand generated but not
+            # served is charged for.
+            #
+            # WITHOUT this, `inventory_level` is an observation with no causal
+            # path to reward: the agent cannot be rewarded or punished for
+            # pricing against it, so it correctly learns to ignore it. That was
+            # measured - sweeping the inventory input across its whole range
+            # moved under 5% of pricing decisions, and retraining on a realistic
+            # inventory series did NOT change that, because the defect is here in
+            # the reward rather than in the data.
+            #
+            # With it, the economics the project claims to model actually bind:
+            # cutting price into low stock manufactures demand that cannot be
+            # served, so the agent has a reason to raise price as stock falls -
+            # and a reason to care whether its stock figure is correct, which is
+            # the premise of the whole staleness experiment.
+            stock       = float(self._inventory_raw[idx])
+            sold        = min(adj_demand, stock)
+            lost        = adj_demand - sold
+            revenue     = price * sold
+            profit_margin = (price - cost) * sold
+            stockout_pen  = self.lost_sale_penalty * price * lost
+            # Endogenous now: a consequence of the agent's own pricing against
+            # the stock it had, not a flag read off the dataset row.
+            stockout      = 1.0 if lost > 0 else 0.0
+        else:
+            # Original behaviour, preserved so FYP1's RL results stay comparable.
+            # `stockout` here is exogenous - read from the dataset row, identical
+            # whatever the agent does - so it shifts the reward without ever
+            # depending on the action.
+            revenue       = price * adj_demand
+            profit_margin = (price - cost) * adj_demand
+            stockout      = float(self._stockout[idx])
+            stockout_pen  = 0.15 * revenue * stockout
+            sold, lost    = adj_demand, 0.0
 
         reward = (profit_margin - stockout_pen) / 1000.0  # scale to ~[-1, 5]
         reward = float(np.clip(reward, -5.0, 5.0))
@@ -778,96 +921,6 @@ def evaluate_rl(
         "cumulative_profit" : float(ep_profit),
         "pricing_regret"    : float(total_regret / max(total_steps, 1)),
     }
-
-
-# ── CL Metrics (BWT / FWT) ────────────────────────────────────────────────────
-
-def compute_bwt_fwt(
-    perf_matrix: np.ndarray,
-    primary_is_higher_better: bool = True,
-    fwt_baseline_matrix: Optional[np.ndarray] = None,
-) -> Tuple[float, float]:
-    """
-    Compute Backward Transfer (BWT) and Forward Transfer (FWT).
-
-    perf_matrix[i, j] = performance on task j evaluated after training on task i.
-    Shape: (n_tasks, n_tasks). The upper triangle is filled by evaluating the
-    current model on future/unseen tasks before those tasks are trained.
-
-    BWT = (1/(T-1)) * sum_{i=1}^{T-1} (R_{T,i} - R_{i,i})
-    FWT = (1/(T-1)) * sum_{i=2}^{T}   (R_{i-1,i} - b_i)
-          where b_i comes from fwt_baseline_matrix at the same train/eval
-          point. In the experiment runner this baseline is the naive method's
-          future-task score, so RECALL/EWC/adaptive methods are compared
-          against plain sequential fine-tuning.
-    """
-    T = perf_matrix.shape[0]
-    if T < 2:
-        return 0.0, 0.0
-
-    # BWT: how much does final model forget earlier tasks?
-    bwt_vals = []
-    for i in range(T - 1):
-        r_final  = perf_matrix[T - 1, i]
-        r_at_i   = perf_matrix[i, i]
-        if not (np.isnan(r_final) or np.isnan(r_at_i)):
-            diff = r_final - r_at_i
-            bwt_vals.append(diff if primary_is_higher_better else -diff)
-    bwt = float(np.mean(bwt_vals)) if bwt_vals else 0.0
-
-    # FWT: does past learning help on new tasks?
-    baseline_matrix = fwt_baseline_matrix if fwt_baseline_matrix is not None else perf_matrix
-    fwt_vals = []
-    for i in range(1, T):
-        r_transfer = perf_matrix[i - 1, i]
-        r_baseline = baseline_matrix[i - 1, i]
-        if not (np.isnan(r_transfer) or np.isnan(r_baseline)):
-            diff = r_transfer - r_baseline
-            fwt_vals.append(diff if primary_is_higher_better else -diff)
-    fwt = float(np.mean(fwt_vals)) if fwt_vals else 0.0
-
-    return bwt, fwt
-
-
-def compute_forgetting(
-    perf_matrix: np.ndarray,
-    primary_is_higher_better: bool = True,
-) -> Tuple[float, float]:
-    """
-    Compute total and average forgetting across previous tasks.
-
-    Forgetting is positive when the final model is worse than its best earlier
-    score on an eval task. For lower-is-better metrics this is
-    final_error - best_previous_error. For higher-is-better metrics this is
-    best_previous_score - final_score.
-    """
-    T = perf_matrix.shape[0]
-    if T < 2:
-        return 0.0, 0.0
-
-    forgetting_vals = []
-    for eval_idx in range(T - 1):
-        previous_scores = perf_matrix[eval_idx:T - 1, eval_idx]
-        previous_scores = previous_scores[~np.isnan(previous_scores)]
-        final_score = perf_matrix[T - 1, eval_idx]
-
-        if previous_scores.size == 0 or np.isnan(final_score):
-            continue
-
-        if primary_is_higher_better:
-            best_previous = float(np.max(previous_scores))
-            forgetting = best_previous - float(final_score)
-        else:
-            best_previous = float(np.min(previous_scores))
-            forgetting = float(final_score) - best_previous
-
-        forgetting_vals.append(max(0.0, forgetting))
-
-    total_forgetting = float(np.sum(forgetting_vals)) if forgetting_vals else 0.0
-    avg_forgetting = float(np.mean(forgetting_vals)) if forgetting_vals else 0.0
-    return total_forgetting, avg_forgetting
-
-
 
 
 # ─── Cell: Shared CL Engines (EWC, Replay, SDFT) ─────────────────────────────
@@ -1129,124 +1182,112 @@ class PPOEWCEngine:
 
 
 
+# ─── PPO continual-learning callbacks ─────────────────────────────────────────
+# Vendored from hybrid_pipeline/experiment_runner.py, where they sat beside the
+# FYP1 task-loop they were written for. They are model machinery, not
+# orchestration, so they belong here.
+# ── RECALL Callback ───────────────────────────────────────────────────────────
 
-# ─── Cell: Results Logger & Checkpoint Manager ───────────────────────────────
-
-class ResultsLogger:
+class RECALLCallback(BaseCallback):
     """
-    Logs all metric evaluations into a structured DataFrame.
-    Columns: model_type, cl_method, train_task_id, eval_task_id,
-             eval_phase, metric_name, metric_value, timestamp
-    """
+    RECALL-style replay-enhanced CL callback for PPO.
+    After each rollout collection, injects past transitions into the rollout buffer
+    by creating a supplementary batch that modifies the policy gradient signal.
 
-    def __init__(self):
-        self._records: List[Dict] = []
-        # perf_matrix[model_type][cl_method] = 2D np array (n_tasks x n_tasks)
-        self._perf_matrices: Dict[str, Dict[str, np.ndarray]] = defaultdict(dict)
-        self._n_tasks = len(CONFIG["tasks"])
-
-    def log(
-        self,
-        model_type   : str,
-        cl_method    : str,
-        train_task_id: int,
-        eval_task_id : int,
-        metrics      : Dict[str, float],
-        eval_phase   : str = "seen",
-    ):
-        ts = datetime.now().isoformat(timespec="seconds")
-        for metric_name, value in metrics.items():
-            self._records.append({
-                "model_type"    : model_type,
-                "cl_method"     : cl_method,
-                "train_task_id" : train_task_id,
-                "eval_task_id"  : eval_task_id,
-                "eval_phase"    : eval_phase,
-                "metric_name"   : metric_name,
-                "metric_value"  : value,
-                "timestamp"     : ts,
-            })
-
-    def to_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame(self._records)
-
-    def save(self, path: str = None):
-        path = path or str(Path(CONFIG["paths"]["results"]) / "all_metrics.csv")
-        self.to_dataframe().to_csv(path, index=False)
-        console.print(f"  Results saved → {path}")
-
-    def get_perf_matrix(
-        self,
-        model_type : str,
-        cl_method  : str,
-        metric_name: str,
-    ) -> np.ndarray:
-        """
-        Build (n_tasks × n_tasks) performance matrix for BWT/FWT computation.
-        mat[i, j] = metric value on task j after training on task i+1.
-        """
-        df  = self.to_dataframe()
-        sub = df[
-            (df["model_type"] == model_type) &
-            (df["cl_method"]  == cl_method)  &
-            (df["metric_name"]== metric_name)
-        ]
-        n   = len(CONFIG["tasks"])
-        self._n_tasks = n
-        mat = np.full((n, n), np.nan)
-        for _, row in sub.iterrows():
-            i = int(row["train_task_id"]) - 1
-            j = int(row["eval_task_id"])  - 1
-            if 0 <= i < n and 0 <= j < n:
-                mat[i, j] = row["metric_value"]
-        return mat
-
-
-class CheckpointManager:
-    """
-    Saves and loads model checkpoints.
-    Keeps the best checkpoint per method based on primary metric.
+    Implementation: We augment the training by running an additional
+    supervised imitation step on replayed experiences after each PPO update.
+    This preserves past policy behaviour without modifying the core PPO algorithm.
     """
 
-    def __init__(self):
-        self._best: Dict[str, float] = {}
-        self._best_path: Dict[str, str] = {}
+    def __init__(self, replay_buf: RLReplayBuffer, mix_n: int, device: str, bc_coef: float = 0.1):
+        super().__init__(verbose=0)
+        self.replay_buf = replay_buf
+        self.mix_n      = mix_n
+        self.device     = device
+        self.bc_coef    = bc_coef
 
-    def save_forecasting(
-        self,
-        model    : CLTFT,
-        trainer  : L.Trainer,
-        cl_method: str,
-        task_id  : int,
-        metric   : float,
-    ):
-        path = ckpt_path("forecasting", cl_method, task_id)
-        trainer.save_checkpoint(path)
+    def _on_step(self) -> bool:
+        return True
 
-        key = f"forecasting_{cl_method}"
-        # Lower MASE is better
-        if key not in self._best or (not np.isnan(metric) and metric < self._best.get(key, np.inf)):
-            best_path = ckpt_path("forecasting", cl_method, task_id, "best")
-            trainer.save_checkpoint(best_path)
-            self._best[key]      = metric
-            self._best_path[key] = best_path
-            console.print(f"  [green]★ New best {cl_method} MASE={metric:.4f}[/green]")
+    def _on_rollout_end(self):
+        """Called after rollout collection, before PPO update."""
+        if len(self.replay_buf) < self.mix_n:
+            return
 
-    def save_rl(self, model: PPO, cl_method: str, task_id: int, metric: float):
-        path = ckpt_path("rl", cl_method, task_id).replace(".ckpt", "")
-        model.save(path)
+        batch   = self.replay_buf.sample(self.mix_n)
+        obs_t   = torch.tensor(batch["obs"],     dtype=torch.float32, device=self.device)
+        acts_t  = torch.tensor(batch["actions"], dtype=torch.long,    device=self.device)
 
-        key = f"rl_{cl_method}"
-        # Higher cumulative_profit is better
-        if key not in self._best or (not np.isnan(metric) and metric > self._best.get(key, -np.inf)):
-            best_path = ckpt_path("rl", cl_method, task_id, "best").replace(".ckpt", "")
-            model.save(best_path)
-            self._best[key]      = metric
-            self._best_path[key] = best_path
+        policy  = self.model.policy
+        # Compute log-prob under current policy
+        dist    = policy.get_distribution(obs_t)
+        log_p   = dist.log_prob(acts_t)
+
+        # Imitation loss: maximise log-prob of past actions (behaviour cloning)
+        bc_loss = -log_p.mean() * self.bc_coef   # weighted to not dominate PPO loss
+        policy.optimizer.zero_grad()
+        bc_loss.backward()
+        policy.optimizer.step()
 
 
-# ── Instantiate global logger and checkpoint manager ──────────────────────────
-LOGGER  = ResultsLogger()
-CKPT_MGR = CheckpointManager()
+# ── SDFT Callback ─────────────────────────────────────────────────────────────
+
+class SDFTCallback(BaseCallback):
+    """
+    SDFT for RL: KL penalty between frozen old-task policy and current policy.
+    Applied as an auxiliary gradient step after each PPO rollout.
+    """
+
+    def __init__(self, teacher_store: RLTeacherStore, kl_coef: float, device: str):
+        super().__init__(verbose=0)
+        self.teacher_store = teacher_store
+        self.kl_coef       = kl_coef
+        self.device        = device
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self):
+        if self.teacher_store.teacher_policy is None:
+            return
+
+        policy = self.model.policy
+        # Sample recent observations from rollout buffer
+        try:
+            rollout_data = next(self.model.rollout_buffer.get(64))
+            obs_t = rollout_data.observations.to(self.device)
+        except (StopIteration, AttributeError):
+            return
+
+        kl = self.teacher_store.kl_penalty(self.model, obs_t)
+        kl_loss = self.kl_coef * kl
+
+        policy.optimizer.zero_grad()
+        kl_loss.backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
+        policy.optimizer.step()
 
 
+# ── EWC Callback ──────────────────────────────────────────────────────────────
+
+class EWCCallbackRL(BaseCallback):
+    """Applies EWC penalty after each PPO rollout update."""
+
+    def __init__(self, ewc_engine: PPOEWCEngine, device: str, scale: float = 1.0):
+        super().__init__(verbose=0)
+        self.ewc_engine = ewc_engine
+        self.device     = device
+        self.scale      = scale
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self):
+        if not self.ewc_engine.fisher:
+            return
+        policy  = self.model.policy
+        penalty = self.ewc_engine.penalty(policy) * self.scale
+        policy.optimizer.zero_grad()
+        penalty.backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
+        policy.optimizer.step()
