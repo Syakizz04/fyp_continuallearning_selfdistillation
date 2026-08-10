@@ -111,7 +111,14 @@ CONFIG = {
         # on ~25% of checks, close to what pure below-average noise produces,
         # while the forecasting detector fired at ~200x its own noise rate.
         # `ref_profit_sigma` was already being calibrated and simply ignored.
-        "rl_k_sigma"      : 2.0,
+        # 1.5, not 2.0-for-symmetry-with-fc: equal k means different strictness
+        # across differently-shaped distributions (MASE is right-skewed and long
+        # tailed; profit_index on base_v4 is tight, std 0.056). Chosen from
+        # frozen's measured operating band - see experiments/analyze_rl_floor.py.
+        # At 1.5 the floor is 0.9161, ~the 10-15th percentile, firing ~12 times
+        # against the ~26 that below-floor noise alone would produce. The old
+        # flat 1.0 sat ABOVE the median of 0.993 and fired ~39.
+        "rl_k_sigma"      : 1.5,
         # Fallback only, for calibrations predating ref_profit_sigma.
         "rl_profit_floor" : 1.0,
         "rl_consecutive"  : 2,
