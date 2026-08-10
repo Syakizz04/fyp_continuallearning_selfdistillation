@@ -2,6 +2,7 @@
 # Safe to import: defines CONFIG and helpers, seeds RNGs, makes output dirs;
 # does not load data or train until prepare_drift_data() is called.
 
+import hashlib
 import os
 import random
 import logging
@@ -32,6 +33,23 @@ SEED = 42
 random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(SEED)
+
+
+def seed_for(*parts) -> int:
+    """A stable 31-bit seed from an identity, e.g. (seed, arm, date, "fc").
+
+    Uses sha256 rather than the builtin `hash()`, which is randomised per
+    process for str inputs unless PYTHONHASHSEED is pinned - a per-run salt is
+    precisely what this exists to remove.
+    """
+    key = "|".join(str(p) for p in parts)
+    return int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) % (2 ** 31)
+
+
+def seed_everything(value: int) -> None:
+    random.seed(value); np.random.seed(value); torch.manual_seed(value)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(value)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BF16_OK = False
@@ -85,6 +103,11 @@ CONFIG = {
     # (~24 retrains) and is left out by default for runtime; re-add it here to
     # restore it, the on_check_periodic path is unchanged.
     "baselines"    : ["frozen", "naive"],
+    # Run-level seed. Every retrain derives its own seed from this plus its
+    # identity, so a fit depends on WHAT it is, never on how much RNG whatever
+    # ran before it happened to consume. Vary it to get independent replicates.
+    "seed": SEED,
+
     "retrain": {
         "scope"             : "recent_window+replay",
         "recent_window_weeks": 8,       # data window a triggered retrain trains on

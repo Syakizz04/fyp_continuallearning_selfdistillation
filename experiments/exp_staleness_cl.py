@@ -339,6 +339,9 @@ def main(argv=None) -> int:
             return 1
     CONFIG["paths"]["demand_csv"] = str(args.data_dir / "demand_forecasting.csv")
     CONFIG["paths"]["rl_csv"] = str(args.data_dir / "rl_environment.csv")
+    # Drives per-retrain seeding as well as the censoring draw, so --seed gives
+    # a genuinely independent replicate rather than only a different censor mask.
+    CONFIG["seed"] = args.seed
 
     root = Path(CONFIG["paths"]["results"]) / args.out
     root.mkdir(parents=True, exist_ok=True)

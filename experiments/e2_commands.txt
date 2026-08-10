@@ -4,6 +4,7 @@ E2 SWEEP - QUICK COMMAND REFERENCE
 Instance : 47323719   ssh -p 395 root@69.163.69.99
 Project  : /workspace/fyp        (NOT ~/fyp - that path does not exist)
 Branch   : main                  (fyp2-system was deleted after the PR merge)
+Note     : see section 8 - single runs cannot rank arms; use --seed replicates
 Sweep    : 12 cells = 3 censoring (none/strong_lock/escrow_quota) x 4 arms
            (frozen/naive/replay/sdft), CONCURRENCY=12
 
@@ -162,7 +163,39 @@ with preflight before committing.
 
 
 -------------------------------------------------------------------------------
-8. E5 - THE SDFT ALPHA SWEEP
+8. REPLICATES - REQUIRED BEFORE CLAIMING ONE ARM BEATS ANOTHER
+-------------------------------------------------------------------------------
+Retraining fires on a threshold crossing, and a GPU fit is not bit-reproducible
+(~2e-6 across 533 tensors even against itself). A 1e-6 difference can flip
+whether MASE breaches mu+2*sigma twice running, changing the retrain schedule
+and everything after it. So a single run cannot establish that one arm beats
+another.
+
+--seed now drives per-retrain seeding as well as the censoring draw, so runs at
+different seeds are genuinely independent replicates:
+
+    python -m experiments.exp_staleness_cl --censoring escrow_quota         --arms frozen naive replay sdft --seed 42  --out rep42
+    python -m experiments.exp_staleness_cl --censoring escrow_quota         --arms frozen naive replay sdft --seed 123 --out rep123
+    python -m experiments.exp_staleness_cl --censoring escrow_quota         --arms frozen naive replay sdft --seed 7   --out rep7
+
+frozen never trains, so it is identical at every seed - run it once and reuse.
+
+Read it as PAIRED deltas within each seed (sdft - replay, sdft - naive) on
+forgetting_mase_base_era and walk_mase_mean. Same seed across arms means seed
+effects cancel. A claim is decisive only if the sign is consistent across seeds
+AND the gap exceeds the seed-to-seed spread. If the sign flips, the honest
+finding is "indistinguishable at this sample size" - which is a real result, not
+a failure.
+
+Why this matters: the FYP1 drift run and E2 disagreed about whether SDFT adapts
+(walk MASE 1.074 vs 1.415) with a byte-identical forecaster, dataset and
+calibration. The cause was the forecaster and pricer sharing one RNG stream;
+that is fixed, but the threshold amplification remains and only replicates
+control for it.
+
+
+-------------------------------------------------------------------------------
+9. E5 - THE SDFT ALPHA SWEEP
 -------------------------------------------------------------------------------
 6 cells = 2 censoring (none, escrow_quota) x 3 alphas (0.7, 0.85, 0.95).
 alpha=0.5 is NOT re-run - E2 already measured it, and it is the baseline.

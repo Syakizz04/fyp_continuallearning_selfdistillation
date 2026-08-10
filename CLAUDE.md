@@ -111,6 +111,40 @@ Each `*_pipeline/` directory is a self-contained package sharing a three-module 
 
 `initial_pipeline` no longer shares code with anything, so changes there need no mirroring — the old "mirror it into the other package" rule is gone with `hybrid_pipeline`.
 
+## Reproducibility: what is and is not guaranteed
+
+The drift-triggered walk was first run and reported in **FYP1** (results in
+`outputs/drift/results/*.csv`, shown on the deployed dashboard); FYP2 builds the
+censoring experiments on top of the same engine. Comparing the two exposed a
+confound worth understanding before trusting any arm comparison.
+
+**Retrains are seeded from their own identity, not the inherited RNG stream.**
+`RetrainController._seed_retrain` keys each fit on
+`(CONFIG["seed"], arm, date, model_type)`. Before this, the forecaster and the
+pricer shared one global stream, so a forecaster fine-tune's shuffle order and
+dropout masks depended on how many PPO retrains had already fired. That is not
+theoretical: two runs with a **byte-identical** forecaster, dataset, calibration
+and retrain date produced post-retrain walk MASE of **0.867 and 1.373**, because
+one had three pricer retrains before the forecaster's first retrain and the
+other had one. It was also *systematic between arms* — E2's arms fired 11/6/7
+pricer retrains — so averaging over runs could not have removed it.
+`drift_pipeline/test_retrain_determinism.py` is the regression guard.
+
+**A GPU fit is still not bit-reproducible**, even against itself: ~2e-6 across
+533 tensors with `cudnn.deterministic` already True (cuBLAS reductions and
+atomics). So the test asserts a *relative* property — burning RNG beforehand
+must move the weights no more than re-running the identical fit does.
+
+**Consequence for the design: the walk amplifies that noise.** Retraining is
+triggered by a threshold crossing, so a 1e-6 weight difference can flip whether
+MASE breaches `mu + 2*sigma` twice running, which changes the retrain schedule,
+which changes everything after it. **Single-run arm comparisons are therefore
+not safe.** Any claim that one CL method beats another needs replicates —
+`--seed` now varies the retrain seeding as well as the censoring draw, so
+repeated runs are genuinely independent — and the between-arm gap has to exceed
+the between-seed spread. `frozen` is exempt: it never trains, which is why its
+walk MASE is identical to six decimals across every cell.
+
 ## Conventions and gotchas
 
 - **CONFIG is mutated, not subclassed.** Smoke tests and `configure_vast_ai()` adjust the experiment by editing `CONFIG` in place after import. Helpers re-read `CONFIG` at call time (e.g. `min_tft_rows()`) precisely so these post-import mutations take effect — keep that pattern; don't snapshot CONFIG values at import.

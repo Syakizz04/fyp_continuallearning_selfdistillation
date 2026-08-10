@@ -36,7 +36,8 @@ import torch
 import lightning as L
 from stable_baselines3 import PPO
 
-from .core_pipeline import CONFIG, DEVICE, console, slice_by_dates
+from .core_pipeline import (CONFIG, DEVICE, SEED, console, seed_everything,
+                            seed_for, slice_by_dates)
 from . import base_training as bt
 from . import monitor as mon
 from . import walk_state as ws
@@ -181,8 +182,29 @@ class RetrainController:
             log_every_n_steps=5,
         )
 
+    # ── determinism ─────────────────────────────────────────────────────────
+    def _seed_retrain(self, origin, model_type: str) -> None:
+        """Reseed from this retrain's IDENTITY, not the inherited RNG stream.
+
+        Without this the forecaster and the pricer share one global stream, so a
+        fit's shuffle order and dropout masks depend on how much randomness
+        everything before it consumed. That coupling is not theoretical: two runs
+        with a byte-identical forecaster, dataset and calibration produced
+        post-retrain walk MASE of 0.867 and 1.373, because one had three PPO
+        retrains before the forecaster's first retrain and the other had one.
+
+        It is also a systematic confound between ARMS, not merely noise - E2's
+        arms did 11 / 6 / 7 pricer retrains, so each arm's forecaster drew from a
+        different RNG state by construction, and averaging over runs cannot
+        remove that. Keying on (seed, arm, date, model) makes a retrain
+        reproducible and independent of its siblings.
+        """
+        seed_everything(seed_for(CONFIG.get("seed", SEED), self.strategy,
+                                 pd.Timestamp(origin).date(), model_type))
+
     # ── forecasting retrain ─────────────────────────────────────────────────
     def retrain_forecaster(self, origin, reason: str):
+        self._seed_retrain(origin, "fc")
         df = self._recent_tft(origin)
         loader = self._fc_loader(df)
         model = self.forecaster
@@ -236,6 +258,7 @@ class RetrainController:
 
     # ── RL retrain ──────────────────────────────────────────────────────────
     def retrain_pricer(self, origin, reason: str):
+        self._seed_retrain(origin, "rl")
         df = self._recent_rl(origin)
         if df.empty:
             return
