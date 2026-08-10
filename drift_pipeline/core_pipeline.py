@@ -104,9 +104,19 @@ CONFIG = {
     "drift": {
         "fc_k_sigma"      : 2.0,
         "fc_consecutive"  : 2,
+        # RL drift is an anomaly test, symmetric with the forecasting one: fire
+        # when profit falls k sigma BELOW the calibrated reference. It used to
+        # threshold at the bare reference mean (`rl_profit_floor` 1.0), which is
+        # a service-level policy rather than a drift test - on base_v4 that fired
+        # on ~25% of checks, close to what pure below-average noise produces,
+        # while the forecasting detector fired at ~200x its own noise rate.
+        # `ref_profit_sigma` was already being calibrated and simply ignored.
+        "rl_k_sigma"      : 2.0,
+        # Fallback only, for calibrations predating ref_profit_sigma.
         "rl_profit_floor" : 1.0,
         "rl_consecutive"  : 2,
         "k_sensitivity"   : [1.5, 2.0, 2.5],   # reported post-hoc from logged stream
+        "rl_k_sensitivity": [0.0, 0.5, 1.0, 1.5, 2.0, 2.5],
     },
 
     # ── Forgetting probes ──────────────────────────────────────────────────

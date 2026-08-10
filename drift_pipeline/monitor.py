@@ -91,6 +91,29 @@ class DebouncedDetector:
         return False
 
 
+def rl_profit_floor(calibration: Dict, drift: Optional[Dict] = None) -> float:
+    """The RL drift threshold, expressed in `profit_index` units.
+
+    The stream logs `profit_index = cumulative_profit / ref_profit_mu`, so a raw
+    threshold of `mu - k*sigma` becomes `1 - k*(sigma/mu)` once normalised. That
+    normalisation is the whole reason the sigma was easy to overlook: in index
+    space the reference mean is exactly 1.0, which looks like a sensible floor
+    until you notice it is the CENTRE of the distribution, not its tail.
+
+    Falls back to the flat `rl_profit_floor` when a checkpoint's calibration
+    predates `ref_profit_sigma`, so old bases still load rather than crashing.
+    """
+    drift = drift if drift is not None else CONFIG["drift"]
+    rl = calibration.get("rl", {})
+    mu = rl.get("ref_profit_mu")
+    sigma = rl.get("ref_profit_sigma")
+    k = drift.get("rl_k_sigma")
+    if (mu is None or sigma is None or k is None
+            or not np.isfinite(sigma) or not np.isfinite(mu) or abs(mu) < 1e-9):
+        return float(drift["rl_profit_floor"])
+    return 1.0 - float(k) * (float(sigma) / abs(float(mu)))
+
+
 def rederive_triggers(stream: List[Dict], *, mu: float, sigma: float, k: float,
                       consecutive: int, metric: str = "mase",
                       direction: str = "above") -> List[str]:
@@ -151,7 +174,7 @@ def walk_forward(
     mu, sigma = calib["forecasting"]["mase_mu"], calib["forecasting"]["mase_sigma"]
     fc_threshold = mu + drift["fc_k_sigma"] * sigma
     ref_profit   = calib["rl"]["ref_profit_mu"]
-    profit_floor = drift["rl_profit_floor"]
+    profit_floor = rl_profit_floor(calib, drift)
 
     fc_det = DebouncedDetector(fc_threshold, drift["fc_consecutive"], "above")
     rl_det = DebouncedDetector(profit_floor, drift["rl_consecutive"], "below")
@@ -173,7 +196,7 @@ def walk_forward(
 
     console.print(f"[bold]Walk-forward[/bold] arm='{arm}' over {len(checks)} weekly checks "
                   f"(FC thr={fc_threshold:.3f} @k={drift['fc_k_sigma']}, "
-                  f"RL floor={profit_floor})...")
+                  f"RL floor={profit_floor:.4f} @k={drift.get('rl_k_sigma')})...")
     if start_idx:
         console.print(f"  [cyan]resuming at check {start_idx}/{len(checks)}[/cyan] "
                       f"({res.n_fc_triggers} FC + {res.n_rl_triggers} RL triggers so far)")
@@ -268,10 +291,24 @@ def save_walk(res: WalkResult, calibration: Dict) -> Dict[str, str]:
         ksens[f"k={k}"] = {"threshold": mu + k * sigma,
                            "n_triggers": len(dates), "dates": dates}
 
+    # The RL counterpart. Reported for the same reason as the forecasting table:
+    # the threshold is a judgement call, so the run should carry the evidence for
+    # what every other choice would have triggered rather than asserting one.
+    rl_cons = CONFIG["drift"]["rl_consecutive"]
+    rl_ksens = {}
+    for k in CONFIG["drift"].get("rl_k_sensitivity", []):
+        floor = rl_profit_floor(calibration, {**CONFIG["drift"], "rl_k_sigma": k})
+        dates = rederive_triggers(res.stream, mu=floor, sigma=0.0, k=0.0,
+                                  consecutive=rl_cons, metric="profit_index",
+                                  direction="below")
+        rl_ksens[f"k={k}"] = {"floor": floor, "n_triggers": len(dates), "dates": dates}
+
     trig_path.write_text(json.dumps(
         {"arm": res.arm, "n_fc_triggers": res.n_fc_triggers,
          "n_rl_triggers": res.n_rl_triggers, "events": res.triggers}, indent=2))
     ksens_path.write_text(json.dumps(ksens, indent=2))
+    (res_dir / f"k_sensitivity_rl_{res.arm}.json").write_text(
+        json.dumps(rl_ksens, indent=2))
 
     console.print(f"[green]✓ Saved drift stream + triggers + k-sensitivity[/green] -> {res_dir}")
     console.print("  k-sensitivity (forecasting retrains): "
