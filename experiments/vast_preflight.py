@@ -82,6 +82,25 @@ def main(argv=None) -> int:
         check("CPU cores", PASS if cores >= args.concurrency else WARN,
               f"{cores} physical; much of each check is pandas/env rollout, "
               f"so fewer cores than cells throttles the sweep")
+
+        # Cores-vs-cells above is necessary but NOT sufficient, and believing it
+        # was cost a full overnight rental: torch sizes its intra-op pool from
+        # the box's core count with no knowledge of sibling cells, so the box
+        # actually sees `threads x concurrency` runnable threads. An 8-core box
+        # at concurrency 6 passed the check above while sitting at load 48 with
+        # the GPU idle and not one cell finishing in 11 hours.
+        try:
+            import torch as _torch
+            threads = _torch.get_num_threads()
+            demand = threads * args.concurrency
+            check("Thread budget", PASS if demand <= max(cores, 1) else FAIL,
+                  f"{threads} torch thread(s) x {args.concurrency} cells = "
+                  f"{demand} runnable vs {cores} physical core(s)"
+                  + ("" if demand <= cores else
+                     " - export OMP_NUM_THREADS=1 before launching "
+                     "(run_e2.sh now does this for you)"))
+        except Exception:                                     # noqa: BLE001
+            pass
     except ImportError:
         check("Host RAM", WARN, "psutil not installed; cannot verify")
 

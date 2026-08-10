@@ -27,6 +27,21 @@ LOGDIR=${LOGDIR:-outputs/drift/logs/e2}
 # Default 0 for notebook/fork safety on Windows; a Linux box with spare cores
 # should use them, but not so many that N cells x M workers oversubscribes.
 export FYP_NUM_WORKERS=${FYP_NUM_WORKERS:-2}
+
+# Torch sizes its intra-op thread pool from the PHYSICAL CORE COUNT of the whole
+# box, with no idea that N-1 sibling cells are doing the same. On an 8-core box
+# at CONCURRENCY=6 that is 6 x 8 = 48 runnable threads over 8 cores - measured,
+# not theorised: load average sat at 48.4 while the GPU idled at 0% and no cell
+# finished in 11 hours.
+#
+# One thread per process is the right cap rather than a smaller multiple,
+# because the tensors here are small (the TFT is ~4 MB, PPO acts on batch-1
+# observations) and intra-op threading on tensors that size loses more to
+# thread-sync overhead than it wins. Capping is therefore expected to make each
+# cell faster on its own, not merely stop it fighting its siblings. The real
+# parallelism is across cells, which is what CONCURRENCY already controls.
+export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
+export MKL_NUM_THREADS=${MKL_NUM_THREADS:-1}
 export PYTHONIOENCODING=utf-8
 export PYTHONUNBUFFERED=1
 
