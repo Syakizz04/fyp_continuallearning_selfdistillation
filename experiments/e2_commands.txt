@@ -160,6 +160,45 @@ What to rent: filter on RAM and PHYSICAL CORES, not GPU tier. Peak VRAM is
 vast.ai listings have over-stated actual allocation by roughly 2x, so verify
 with preflight before committing.
 
+
+-------------------------------------------------------------------------------
+8. E5 - THE SDFT ALPHA SWEEP
+-------------------------------------------------------------------------------
+6 cells = 2 censoring (none, escrow_quota) x 3 alphas (0.7, 0.85, 0.95).
+alpha=0.5 is NOT re-run - E2 already measured it, and it is the baseline.
+
+REQUIRES E2's results on disk: each cell copies E2's frozen probe scores in as
+the forgetting anchor (frozen never retrains, so it is invariant to both alpha
+and censoring - copying avoids six identical walks). If you are on a fresh box,
+upload results.tar.gz and extract it at the project root FIRST:
+    tar -xzf results.tar.gz          # restores outputs/drift/results/e2/
+
+Check the plan without loading models (also verifies the anchor is present):
+    python -m experiments.exp_sdft_alpha --dry-run
+
+Run:
+    CONCURRENCY=6 bash experiments/run_e5.sh
+
+Progress: same monitor idea, but logs land in outputs/drift/logs/e5/
+    for f in outputs/drift/logs/e5/*.log; do
+      echo "$(basename $f): $(grep -c 'drift retrain' $f) retrains"
+    done
+
+Read the result:
+    cat outputs/drift/results/e5/e5_summary.csv
+
+What it answers - compare against E2's numbers at the same censoring level:
+    walk_mase_mean            replay ~1.02, frozen 1.474, sdft@0.5 ~1.42
+      -> does it fall toward replay as alpha rises? that is the viability test
+    forgetting_mase_base_era  naive 0.139 (none) / 0.053 (escrow_quota)
+      -> does it stay BELOW naive? if not, the mechanism adds nothing over
+         plain fine-tuning
+    if the best alpha DIFFERS between none and escrow_quota, that is a real
+    finding about self-distillation under endogenous label corruption
+
+Same recovery rules as E2: resumable, do not pass --force, pull results off
+before destroying.
+
 NOTE: running preflight standalone will FAIL the Thread budget check, because
 OMP_NUM_THREADS is only set by run_e2.sh. That is expected - prefix it as above
 to test, or just launch and let run_e2.sh handle it.
