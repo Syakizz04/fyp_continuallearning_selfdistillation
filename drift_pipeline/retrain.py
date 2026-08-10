@@ -39,6 +39,7 @@ from stable_baselines3 import PPO
 from .core_pipeline import CONFIG, DEVICE, console, slice_by_dates
 from . import base_training as bt
 from . import monitor as mon
+from . import walk_state as ws
 from .memory_accounting import MemoryLog, reset_peak
 
 from .trainers import (
@@ -318,21 +319,47 @@ class RetrainController:
 DRIFT_TRIGGERED = ("naive", "ewc", "replay", "sdft")
 
 
-def run_arm(strategy: str, data: Dict, base: Optional[Dict] = None) -> Dict:
-    """Run one arm end-to-end. Loads a FRESH base (isolation) unless given one."""
+def run_arm(strategy: str, data: Dict, base: Optional[Dict] = None,
+            checkpoint_every: int = 0, resume: bool = True) -> Dict:
+    """Run one arm end-to-end. Loads a FRESH base (isolation) unless given one.
+
+    checkpoint_every>0 snapshots the walk every N checks so an interrupted cell
+    restarts from there instead of from zero — see drift_pipeline.walk_state.
+    `resume` picks up such a snapshot if one is present; it defaults True because
+    a stale checkpoint is only written by a run of this same cell that did not
+    finish, which is exactly the case worth resuming.
+    """
     base = base or mon.load_base()
     ctrl = RetrainController(strategy, base, data)
 
     on_trigger = ctrl.on_trigger if strategy in DRIFT_TRIGGERED else None
     on_check   = ctrl.on_check_periodic if strategy == "periodic" else None
 
+    resume_state = None
+    if resume:
+        saved = ws.load(strategy)
+        if saved is not None:
+            resume_state = ws.restore(ctrl, saved)
+            console.print(f"  [cyan]restored mid-walk state[/cyan] for '{strategy}' "
+                          f"at check {resume_state['next_idx']}")
+
+    on_checkpoint = None
+    if checkpoint_every > 0:
+        def on_checkpoint(next_idx, res_, fc_det, rl_det):        # noqa: F811
+            ws.save(ctrl, res_, fc_det, rl_det, next_idx)
+
     res = mon.walk_forward(
         data, base, arm=strategy,
         forecaster_provider=ctrl.forecaster_provider,
         pricer_provider=ctrl.pricer_provider,
         on_trigger=on_trigger, on_check=on_check,
+        resume_state=resume_state, on_checkpoint=on_checkpoint,
+        checkpoint_every=checkpoint_every,
     )
     paths = mon.save_walk(res, base["calibration"])
+    # The walk is over: a multi-GB buffer snapshot for a finished cell is waste,
+    # and leaving it would make a re-run resume from the end of a completed walk.
+    ws.clear(strategy)
 
     # persist the retrain log (when/why each arm retrained)
     log_path = Path(CONFIG["paths"]["results"]) / f"retrain_log_{strategy}.json"

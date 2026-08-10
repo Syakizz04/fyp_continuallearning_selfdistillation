@@ -76,6 +76,7 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import os
 import shutil
 import sys
 import time
@@ -222,7 +223,7 @@ def load_probe_scores(cell_dir: Path, arms: List[str]) -> Dict[str, List[Dict]]:
 
 
 def run_cell(censoring: str, arm: str, data: Dict, cell_dir: Path,
-             ckpt_dir: Path) -> Dict:
+             ckpt_dir: Path, checkpoint_every: int = 0) -> Dict:
     """One (censoring, arm) cell. Loads a FRESH base so no state leaks between cells."""
     started = time.perf_counter()
 
@@ -232,7 +233,7 @@ def run_cell(censoring: str, arm: str, data: Dict, cell_dir: Path,
     base = mon.load_base(base_paths(ckpt_dir))
 
     with results_dir(cell_dir):
-        out = rt.run_arm(arm, data, base=base)
+        out = rt.run_arm(arm, data, base=base, checkpoint_every=checkpoint_every)
         ctrl = out["controller"]
 
         # Probe-score immediately and drop the controller, rather than holding
@@ -314,6 +315,13 @@ def main(argv=None) -> int:
                     help="truncate the walk to the first N weekly checks. For "
                          "smoke-testing the wiring only - a short walk sees fewer "
                          "regimes and its numbers are not comparable to a full run")
+    ap.add_argument("--checkpoint-every", type=int,
+                    default=int(os.environ.get("FYP_CHECKPOINT_EVERY", "0")),
+                    help="snapshot each cell's models + CL state every N weekly "
+                         "checks so an interrupted cell resumes there instead of "
+                         "from zero. 0 disables. A saturated replay buffer makes "
+                         "a snapshot ~3 GB, so this trades disk for not losing "
+                         "hours — 20 keeps the write cost near 1%%")
     ap.add_argument("--force", action="store_true",
                     help="re-run cells that already have results on disk")
     ap.add_argument("--no-reuse-static", action="store_true",
@@ -409,7 +417,8 @@ def main(argv=None) -> int:
                 continue
 
             console.print(f"  [bold]{censoring} x {arm}[/bold] ...")
-            row = run_cell(censoring, arm, cdata, cell_dir, args.base_ckpt)
+            row = run_cell(censoring, arm, cdata, cell_dir, args.base_ckpt,
+                           checkpoint_every=args.checkpoint_every)
             rows.append(row)
             console.print(f"    done in {row['wall_seconds'] / 60:.1f} min "
                           f"({row['n_fc_retrains']} FC + {row['n_rl_retrains']} RL retrains)")

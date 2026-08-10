@@ -45,6 +45,14 @@ export MKL_NUM_THREADS=${MKL_NUM_THREADS:-1}
 export PYTHONIOENCODING=utf-8
 export PYTHONUNBUFFERED=1
 
+# Mid-walk checkpointing. Cell-level resume alone means a cell killed at check
+# 150 of 157 costs as much as one killed at check 2, which is what an 11-hour
+# loss to a stray Ctrl-C actually bought. Every 20 checks is ~8 snapshots per
+# cell; the replay arm's is the expensive one (~3 GB) and the rest are small.
+# Set 0 to disable. State lives in outputs/drift/results/<cell>/walk_state_<arm>/
+# and survives a vast.ai STOP but not a DESTROY - copy it off before destroying.
+export FYP_CHECKPOINT_EVERY=${FYP_CHECKPOINT_EVERY:-20}
+
 mkdir -p "$LOGDIR"
 
 echo "E2 sweep"

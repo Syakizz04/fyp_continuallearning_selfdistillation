@@ -125,6 +125,9 @@ def walk_forward(
     pricer_provider: Optional[Callable] = None,
     on_trigger: Optional[Callable] = None,
     on_check: Optional[Callable] = None,
+    resume_state: Optional[Dict] = None,
+    on_checkpoint: Optional[Callable] = None,
+    checkpoint_every: int = 0,
 ) -> WalkResult:
     """Step weekly through the walk-forward span, logging the raw drift stream and
     firing debounced triggers.
@@ -134,6 +137,12 @@ def walk_forward(
     trigger fires — Phase 4 wires retraining here; Phase 3 leaves it None.
     on_check(origin, idx) runs before each check's metrics — used by the periodic
     baseline arm to retrain on a fixed schedule (independent of drift).
+
+    resume_state (from drift_pipeline.walk_state) restarts a partially-walked arm:
+    it restores the accumulated stream, the trigger counts and — easy to forget —
+    the detectors' consecutive-breach streaks, which would otherwise reset and
+    under-trigger. on_checkpoint(next_idx, res, fc_det, rl_det) is invoked every
+    `checkpoint_every` checks so the caller can snapshot; 0 disables it.
     """
     bt.sync_config()
     fc_cfg, drift = CONFIG["forecasting"], CONFIG["drift"]
@@ -152,11 +161,26 @@ def walk_forward(
 
     res = WalkResult(arm=arm)
     checks = data["checks"]
+    start_idx = 0
+    if resume_state:
+        res.stream = list(resume_state.get("stream", []))
+        res.triggers = list(resume_state.get("triggers", []))
+        res.n_fc_triggers = int(resume_state.get("n_fc_triggers", 0))
+        res.n_rl_triggers = int(resume_state.get("n_rl_triggers", 0))
+        fc_det.run = int(resume_state.get("fc_det_run", 0))
+        rl_det.run = int(resume_state.get("rl_det_run", 0))
+        start_idx = int(resume_state.get("next_idx", 0))
+
     console.print(f"[bold]Walk-forward[/bold] arm='{arm}' over {len(checks)} weekly checks "
                   f"(FC thr={fc_threshold:.3f} @k={drift['fc_k_sigma']}, "
                   f"RL floor={profit_floor})...")
+    if start_idx:
+        console.print(f"  [cyan]resuming at check {start_idx}/{len(checks)}[/cyan] "
+                      f"({res.n_fc_triggers} FC + {res.n_rl_triggers} RL triggers so far)")
 
     for idx, origin in enumerate(checks):
+        if idx < start_idx:
+            continue
         if on_check is not None:
             on_check(origin, idx)
         fc_model = get_fc()
@@ -208,6 +232,13 @@ def walk_forward(
             row["rl_trigger"] = False
 
         res.stream.append(row)
+
+        # After the row is appended, so the checkpoint's `next_idx` means "the
+        # first check NOT yet in the stream" and a resume neither repeats nor
+        # skips one.
+        if (on_checkpoint is not None and checkpoint_every > 0
+                and (idx + 1) % checkpoint_every == 0 and (idx + 1) < len(checks)):
+            on_checkpoint(idx + 1, res, fc_det, rl_det)
 
     console.print(f"  [cyan]{arm}[/cyan]: {res.n_fc_triggers} forecasting + "
                   f"{res.n_rl_triggers} RL triggers over {len(checks)} checks")
