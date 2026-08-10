@@ -1,0 +1,165 @@
+===============================================================================
+E2 SWEEP - QUICK COMMAND REFERENCE
+===============================================================================
+Instance : 47323719   ssh -p 395 root@69.163.69.99
+Project  : /workspace/fyp        (NOT ~/fyp - that path does not exist)
+Branch   : main                  (fyp2-system was deleted after the PR merge)
+Sweep    : 12 cells = 3 censoring (none/strong_lock/escrow_quota) x 4 arms
+           (frozen/naive/replay/sdft), CONCURRENCY=12
+
+Update the ssh line above if you rent a new box.
+
+Everything below assumes you are in /workspace/fyp with the venv active.
+The venv auto-activates in new shells if you ran the .bashrc line during setup;
+if the prompt does not show (.venv), run:
+    source /workspace/fyp/.venv/bin/activate
+
+
+-------------------------------------------------------------------------------
+1. CHECK PROGRESS  (safe, read-only, run any time)
+-------------------------------------------------------------------------------
+
+Live table, refreshes every 30s:
+    cd /workspace/fyp && python -m experiments.monitor_e2
+
+One snapshot, no loop:
+    python -m experiments.monitor_e2 --once
+
+IMPORTANT: run this in a SEPARATE window from the sweep - a second SSH session
+is simplest. A stray Ctrl+C in the sweep's own window killed the first run.
+Ctrl+C in the monitor is safe; it only stops the monitor.
+
+
+-------------------------------------------------------------------------------
+2. IS IT HEALTHY?
+-------------------------------------------------------------------------------
+
+    cd /workspace/fyp
+    uptime
+    ps -eo etime,pcpu,comm --sort=-pcpu | head -14
+    ls outputs/drift/results/e2/*/probe_scores_*.json 2>/dev/null | wc -l
+    grep -l "Traceback\|KeyboardInterrupt" outputs/drift/logs/e2/*.log || echo "no failures"
+    nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv
+
+GOOD:
+    load average    ~12   (12 cells x 1 thread on 32 cores)
+    per-process CPU ~100% each, 12 processes
+    cells finished  3 within ~20 min (the frozen ones - they never retrain)
+    failures        none
+    GPU             high utilisation is fine and expected
+
+BAD - act on these:
+    load average    100+        -> OMP_NUM_THREADS did not apply; kill and relaunch
+    per-process CPU ~250% each  -> same problem
+    any cell        "interrupted" in the monitor
+    0 cells done after 40 min
+
+Quiet logs and a low GPU reading are NOT problems. Retrain lines only print when
+a retrain actually fires, so long silences are normal.
+
+
+-------------------------------------------------------------------------------
+3. HOW FAR ALONG IS IT?
+-------------------------------------------------------------------------------
+The walk runs 2013-01-01 -> 2015-12-31. The last retrain date is roughly the
+position (a lower bound - the cell may be past it).
+
+    cd /workspace/fyp
+    for f in outputs/drift/logs/e2/none_*.log; do
+      echo "$(basename $f): $(grep 'drift retrain' $f | tail -1)"
+    done
+
+Rough guide:  2013-07 = 17%   2014-01 = 33%   2014-07 = 50%   2015-01 = 67%
+
+
+-------------------------------------------------------------------------------
+4. IF IT DIES OR YOU NEED TO STOP IT
+-------------------------------------------------------------------------------
+
+Stop everything (driver first so no new cells spawn):
+    pkill -f run_e2.sh; pkill -f exp_staleness_cl
+
+Resume - just relaunch. Finished cells are skipped; unfinished ones resume from
+their last checkpoint (saved every 20 checks). Do NOT pass --force.
+    cd /workspace/fyp && CONCURRENCY=12 bash experiments/run_e2.sh
+
+
+-------------------------------------------------------------------------------
+5. WHEN IT FINISHES - CHECK BEFORE TRUSTING THE NUMBERS
+-------------------------------------------------------------------------------
+
+    cd /workspace/fyp
+    cat outputs/drift/results/e2/e2_summary.csv
+
+Expect 12 rows (one per censoring x arm). Then verify:
+
+  a) frozen shows forgetting_mase_base_era EXACTLY 0 in every cell.
+     It is the anchor; anything else means the tables were built against the
+     wrong reference.
+
+  b) frozen is IDENTICAL across all three censoring levels. It never retrains,
+     so it never ingests censored data. If it moves, censoring has leaked into
+     the evaluation path.
+
+  c) naive / replay / sdft all show NON-ZERO retrain counts. Zero means no
+     drift fired and every arm is secretly frozen.
+
+Headline column: forgetting_mase_base_era   (>0 = the arm lost pre-drift
+knowledge). NOT walk_mase_mean - mean walk error confounds adapting to the new
+regime with retaining the old one, and the second is the question.
+
+Also worth reading:
+    cat outputs/drift/results/e2/none/k_sensitivity_rl_sdft.json
+    cat outputs/drift/results/e2/none/k_sensitivity_sdft.json
+These show what every other drift threshold would have triggered - the evidence
+that k=2.0 (forecasting) and k=1.5 (RL) were not arbitrary.
+
+
+-------------------------------------------------------------------------------
+6. BEFORE YOU DESTROY THE INSTANCE  -- DO NOT SKIP
+-------------------------------------------------------------------------------
+
+On the box:
+    cd /workspace/fyp
+    tar -czf results.tar.gz outputs/drift/results/e2
+
+On your LAPTOP (PowerShell, in the project root):
+    cd C:\Users\Syakir\Downloads\Projects\fyp
+    scp -P 395 root@69.163.69.99:/workspace/fyp/results.tar.gz .
+
+Verify it arrived and is not empty BEFORE destroying:
+    tar -tzf results.tar.gz | head
+
+STOP vs DESTROY:
+    Stop    - keeps the disk. Checkpoints survive, the sweep resumes later.
+              Still bills a small storage fee.
+    Destroy - deletes everything, including results you have not copied off.
+
+If the sweep is unfinished and you want to continue on a NEW box later, also
+copy the mid-walk checkpoints (these can be several GB - the replay arms hold
+~3 GB buffers):
+    tar -czf state.tar.gz outputs/drift/results/e2/*/walk_state_*
+
+
+-------------------------------------------------------------------------------
+7. STARTING OVER ON A NEW BOX
+-------------------------------------------------------------------------------
+
+    git clone -b main https://github.com/Syakizz04/fyp_continuallearning_selfdistillation.git fyp
+    cd /workspace/fyp
+    # from laptop:  scp -P <port> payload.tar.gz root@<host>:/workspace/fyp/
+    tar -xzf payload.tar.gz && rm payload.tar.gz
+    python -m venv .venv && source .venv/bin/activate
+    pip install -r requirements.txt
+    echo 'source /workspace/fyp/.venv/bin/activate' >> ~/.bashrc
+    OMP_NUM_THREADS=1 python -m experiments.vast_preflight --concurrency 12
+    CONCURRENCY=12 bash experiments/run_e2.sh
+
+What to rent: filter on RAM and PHYSICAL CORES, not GPU tier. Peak VRAM is
+17.6 MB - any card will do. Need ~5 GB RAM and 1 core per concurrent cell.
+vast.ai listings have over-stated actual allocation by roughly 2x, so verify
+with preflight before committing.
+
+NOTE: running preflight standalone will FAIL the Thread budget check, because
+OMP_NUM_THREADS is only set by run_e2.sh. That is expected - prefix it as above
+to test, or just launch and let run_e2.sh handle it.
