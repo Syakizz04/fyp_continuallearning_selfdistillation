@@ -67,6 +67,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from rich.console import Console  # noqa: E402
 
+from drift_pipeline import base_training as bt  # noqa: E402
 from drift_pipeline import metrics as mt  # noqa: E402
 from drift_pipeline import monitor as mon  # noqa: E402
 from drift_pipeline import retrain as rt  # noqa: E402
@@ -127,12 +128,14 @@ def seed_anchor(cell_dir: Path, censoring: str) -> bool:
 
 
 def run_cell(censoring: str, alpha: float, data: Dict, cell_dir: Path,
-             ckpt_dir: Path, checkpoint_every: int = 0) -> Dict:
+             ckpt_dir: Path, checkpoint_every: int = 0,
+             save_model: bool = True) -> Dict:
     """One (censoring, alpha) cell. Fresh base per cell, so no state leaks."""
     started = time.perf_counter()
 
     free_gpu()
-    base = mon.load_base(base_paths(ckpt_dir))
+    paths = base_paths(ckpt_dir)
+    base = mon.load_base(paths)
 
     # THE injection. In place, after load_base - see the module docstring.
     CONFIG["cl"]["sdft_alpha"] = alpha
@@ -146,6 +149,19 @@ def run_cell(censoring: str, alpha: float, data: Dict, cell_dir: Path,
         mt.save_probe_scores(ARM, scores)
         n_fc = ctrl.stats.n_fc_retrains
         n_rl = ctrl.stats.n_rl_retrains
+
+        # Written BEFORE the controller is dropped - this is the only moment the
+        # walk's trained models exist. Lands beside the cell's metrics so one
+        # results tarball carries both the numbers and the model they describe.
+        if save_model:
+            model_dir = bt.save_serving_checkpoint(
+                ctrl.forecaster, ctrl.pricer,
+                dst_dir=cell_dir / "model", src_ckpt_dir=ckpt_dir,
+                calibration_path=paths["calibration"],
+                provenance={"experiment": "e5", "arm": ARM,
+                            "censoring": censoring, "sdft_alpha": alpha,
+                            "n_fc_retrains": n_fc, "n_rl_retrains": n_rl})
+            console.print(f"    [green]model[/green] -> {model_dir}")
 
     del ctrl, out, base
     free_gpu()
@@ -167,6 +183,11 @@ def main(argv=None) -> int:
                     default=int(os.environ.get("FYP_CHECKPOINT_EVERY", "20")))
     ap.add_argument("--max-checks", type=int, default=None,
                     help="truncate the walk - for smoke-testing the wiring only")
+    ap.add_argument("--no-save-model", action="store_true",
+                    help="skip writing each cell's trained model. By default a "
+                         "loadable checkpoint dir (~7 MB) is written to "
+                         "<cell>/model/ - the walk's models exist only at that "
+                         "moment, and are otherwise dropped once probe-scored")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
@@ -229,7 +250,8 @@ def main(argv=None) -> int:
             else:
                 console.print(f"  [bold]{censoring} x alpha={alpha}[/bold] ...")
                 row = run_cell(censoring, alpha, cdata, cell_dir, args.base_ckpt,
-                               checkpoint_every=args.checkpoint_every)
+                               checkpoint_every=args.checkpoint_every,
+                               save_model=not args.no_save_model)
                 rows.append(row)
                 console.print(f"    done in {row['wall_seconds'] / 60:.1f} min "
                               f"({row['n_fc_retrains']} FC retrains)")

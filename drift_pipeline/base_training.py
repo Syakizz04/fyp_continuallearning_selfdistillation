@@ -12,8 +12,10 @@
 from __future__ import annotations
 
 import json
+import shutil
+import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -250,6 +252,68 @@ def save_base(fc_bundle: Dict, ppo_model: PPO,
     console.print(f"[green]✓ Saved base checkpoints + calibration[/green] -> {ckpt_dir}")
     return {"tft": str(tft_ckpt), "dataset": str(ds_path), "ppo": str(ppo_path),
             "meta": str(meta_path), "calibration": str(calib_path)}
+
+
+def save_serving_checkpoint(forecaster, pricer, dst_dir, src_ckpt_dir,
+                            calibration_path: Optional[str] = None,
+                            provenance: Optional[Dict[str, Any]] = None) -> Path:
+    """Persist a POST-WALK model as a directory `load_base()` can read.
+
+    An experiment cell otherwise drops its models the moment they are
+    probe-scored - the metrics are what the analysis consumes, so nothing was
+    ever written. That leaves the trained artefact unreachable: you can report
+    that an arm reached a MASE, but you cannot serve it, demo it, or inspect it
+    afterwards.
+
+    Deliberately writes the same five filenames a base checkpoint uses, so the
+    output is loadable by `monitor.load_base()`, by `edge_system`'s
+    `LocalInference` (which points at a directory via `FYP_BASE_CKPT_DIR`), and
+    by the experiment drivers' `base_paths()`. A bespoke format would have meant
+    a bespoke loader; this one is already understood everywhere.
+
+    Two details that would otherwise make the file fail to load:
+
+    * **The SDFT teacher is stripped.** A self-distillation run leaves a frozen
+      teacher attached as a submodule, so `state_dict()` carries `teacher.*`
+      keys - and `load_base` rebuilds with `cl_method="naive"`, which has no
+      teacher to receive them. The teacher is training scaffolding; inference
+      never touches it.
+    * **The dataset template is copied, not regenerated.** It carries the
+      encoders and normalisation the TFT was fitted against, so a served model
+      must see exactly the ones it trained with.
+
+    Saves only the weights, not the Lightning training state, so the result is
+    ~5 MB rather than the ~14 MB a `save_checkpoint()` produces.
+    """
+    dst, src = Path(dst_dir), Path(src_ckpt_dir)
+    dst.mkdir(parents=True, exist_ok=True)
+
+    state = {k: v for k, v in forecaster.state_dict().items()
+             if not k.startswith("teacher.")}
+    torch.save({"state_dict": state}, dst / "base_tft.ckpt")
+    pricer.save(str(dst / "base_ppo.zip"))
+    shutil.copy2(src / "base_tft_dataset.pkl", dst / "base_tft_dataset.pkl")
+
+    # The architecture must still come from the base meta (load_base reapplies
+    # it before rebuilding), but the CL block records what was ACTUALLY in force
+    # - which for a swept run is not what the base was trained with.
+    meta = json.loads((src / "base_meta.json").read_text())
+    meta["cl"] = dict(CONFIG["cl"])
+    meta["provenance"] = {**meta.get("provenance", {}),
+                          "derived_from": str(src),
+                          "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                          **(provenance or {})}
+    (dst / "base_meta.json").write_text(json.dumps(meta, indent=2, default=str))
+
+    # Explicit path rather than the results dir, which experiment drivers
+    # repoint per cell - the fallback would resolve to the wrong directory.
+    cal = Path(calibration_path) if calibration_path else (src / "calibration.json")
+    if cal.exists():
+        shutil.copy2(cal, dst / "calibration.json")
+    else:
+        console.print(f"  [yellow]no calibration.json at {cal}[/yellow] - the "
+                      f"saved model will need one supplied to load")
+    return dst
 
 
 def run_base_training_and_calibration(data: Dict) -> Dict:

@@ -199,6 +199,28 @@ What it answers - compare against E2's numbers at the same censoring level:
 Same recovery rules as E2: resumable, do not pass --force, pull results off
 before destroying.
 
+REUSABLE MODELS: each cell writes its trained model to
+    outputs/drift/results/e5/<censoring>/alpha_<a>/model/
+as a normal checkpoint directory (~12 MB: base_tft.ckpt, base_tft_dataset.pkl,
+base_ppo.zip, base_meta.json, calibration.json). The SDFT teacher is stripped,
+so it loads through the ordinary loader with no special handling:
+
+    from drift_pipeline import monitor as mon
+    from experiments.exp_staleness_cl import base_paths
+    base = mon.load_base(base_paths(Path('outputs/drift/results/e5/escrow_quota/alpha_095/model')))
+    fc, ppo = base['forecaster'], base['pricer']
+
+Or serve it from an edge node without code changes:
+    FYP_BASE_CKPT_DIR=outputs/drift/results/e5/escrow_quota/alpha_095/model \
+        python -m edge_system.run_system
+
+base_meta.json records which alpha produced it under "provenance". Disable with
+--no-save-model if you only want the metrics.
+
+These are included in the results tarball, so it will be ~80 MB rather than
+~200 KB. Worth it - the walk's models exist only at the moment they are scored
+and are otherwise dropped.
+
 NOTE: running preflight standalone will FAIL the Thread budget check, because
 OMP_NUM_THREADS is only set by run_e2.sh. That is expected - prefix it as above
 to test, or just launch and let run_e2.sh handle it.
