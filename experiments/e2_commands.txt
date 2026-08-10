@@ -179,10 +179,17 @@ Check the plan without loading models (also verifies the anchor is present):
 Run:
     CONCURRENCY=6 bash experiments/run_e5.sh
 
-Progress: same monitor idea, but logs land in outputs/drift/logs/e5/
-    for f in outputs/drift/logs/e5/*.log; do
-      echo "$(basename $f): $(grep -c 'drift retrain' $f) retrains"
-    done
+Progress - the monitor understands this layout too:
+    python -m experiments.monitor_e2 --layout e5
+    python -m experiments.monitor_e2 --layout e5 --once
+
+VRAM is the constraint here, not cores: every E5 cell is an SDFT cell, and
+self-distillation keeps a frozen TEACHER resident alongside the student, so a
+cell costs ~2.5-3 GB rather than E2's ~1.5 GB average. Six concurrent cells
+OOM'd a 15 GB card. Budget ~3 GB per concurrent cell and watch:
+    nvidia-smi --query-gpu=memory.used --format=csv
+An OOM is recoverable - the cell resumes from its last checkpoint on relaunch -
+so the fix is just a lower CONCURRENCY, not a restart from zero.
 
 Read the result:
     cat outputs/drift/results/e5/e5_summary.csv
