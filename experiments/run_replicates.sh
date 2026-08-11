@@ -35,22 +35,9 @@ ARMS=${ARMS:-"frozen naive replay sdft"}
 CONCURRENCY=${CONCURRENCY:-6}
 LOGDIR=${LOGDIR:-outputs/drift/logs/rep}
 
-export FYP_NUM_WORKERS=${FYP_NUM_WORKERS:-2}
-# See run_e2.sh: N cells x (cores) threads thrashed an 8-core box to a standstill.
-export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
-export MKL_NUM_THREADS=${MKL_NUM_THREADS:-1}
-export PYTHONIOENCODING=utf-8
-export PYTHONUNBUFFERED=1
-export FYP_CHECKPOINT_EVERY=${FYP_CHECKPOINT_EVERY:-20}
-
+source experiments/sweep_common.sh
+sweep_setup_env
 mkdir -p "$LOGDIR"
-
-echo "Seed replicates"
-echo "  censoring   : $CENSORING   (one level, deliberately)"
-echo "  seeds       : $SEEDS"
-echo "  arms        : $ARMS"
-echo "  concurrency : $CONCURRENCY"
-echo
 
 if ! python -m experiments.vast_preflight --concurrency "$CONCURRENCY"; then
     echo "Preflight failed - not starting." >&2
@@ -58,31 +45,28 @@ if ! python -m experiments.vast_preflight --concurrency "$CONCURRENCY"; then
 fi
 
 JOBS=$(mktemp)
-trap 'rm -f "$JOBS"' EXIT
 for s in $SEEDS; do
     for a in $ARMS; do
         echo "$s $a" >> "$JOBS"
     done
 done
-echo "$(wc -l < "$JOBS") cells queued"
-echo
+N=$(wc -l < "$JOBS" | tr -d ' ')
 
-START=$(date +%s)
+sweep_banner "Seed replicates" "$N" \
+    "censoring:$CENSORING (one level, deliberately)" \
+    "seeds:$SEEDS" \
+    "arms:$ARMS" \
+    "logs:$LOGDIR"
+sweep_progress_init "$N"
+trap 'rm -f "$JOBS"; sweep_progress_cleanup' EXIT
 
 xargs -P "$CONCURRENCY" -L1 bash -c '
     set -- $0 $@
     s=$1; a=$2
-    echo "[start] seed=$s $a"
-    if python -m experiments.exp_staleness_cl \
-            --censoring "'"$CENSORING"'" --arms "$a" --seed "$s" --out "rep_s$s" \
-            > "'"$LOGDIR"'/s${s}_${a}.log" 2>&1; then
-        echo "[done ] seed=$s $a"
-    else
-        echo "[FAIL ] seed=$s $a  -- see '"$LOGDIR"'/s${s}_${a}.log"
-    fi
+    source experiments/sweep_common.sh
+    sweep_run_cell "seed=$s  $a" "'"$LOGDIR"'/s${s}_${a}.log" \
+        python -m experiments.exp_staleness_cl \
+            --censoring "'"$CENSORING"'" --arms "$a" --seed "$s" --out "rep_s$s"
 ' < "$JOBS"
 
-echo
-echo "elapsed: $(( ($(date +%s) - START) / 60 )) min"
-echo
-echo "Read it with:  python -m experiments.compare_replicates"
+sweep_footer "$LOGDIR" "python -m experiments.compare_replicates"
