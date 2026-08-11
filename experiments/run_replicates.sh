@@ -69,4 +69,16 @@ xargs -P "$CONCURRENCY" -L1 bash -c '
             --censoring "'"$CENSORING"'" --arms "$a" --seed "$s" --out "rep_s$s"
 ' < "$JOBS"
 
+# Each cell process ran ONE arm, so its build_tables call only ever saw that arm
+# and skipped the tables for want of the `frozen` anchor. Without this pass the
+# run finishes with every probe score on disk and metrics_efficiency.csv holding
+# frozen alone - all the compute done, none of it aggregated.
+echo "Building cross-arm tables for each seed..."
+for s in $SEEDS; do
+    python -m experiments.exp_staleness_cl \
+        --censoring "$CENSORING" --arms $ARMS --seed "$s" --out "rep_s$s" \
+        > "$LOGDIR/aggregate_s${s}.log" 2>&1 \
+        && echo "  seed $s ok" || echo "  seed $s FAILED - see $LOGDIR/aggregate_s${s}.log"
+done
+
 sweep_footer "$LOGDIR" "python -m experiments.compare_replicates"
