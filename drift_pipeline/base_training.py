@@ -135,9 +135,25 @@ def _eval_loader(frame: pd.DataFrame, train_ds):
 
 def window_forecast_error(model, tft_full: pd.DataFrame, train_ds,
                           base_train_df: pd.DataFrame, origin: pd.Timestamp) -> Dict:
-    """MASE/sMAPE/RMSE for a single forecast at `origin`: encoder pulled from the
-    `encoder_length` days before origin, targets = the `prediction_length` days
-    from origin. Returns NaNs if the window can't form (handled upstream)."""
+    """MASE/sMAPE/RMSE over the window `[origin - encoder_length, origin +
+    prediction_length)`. Returns NaNs if the window can't form (handled upstream).
+
+    NOT a single forecast anchored at `origin`, despite the shape of the slice.
+    `_eval_loader` builds its dataset with `predict_mode=False`, so
+    TimeSeriesDataSet emits EVERY valid window inside that span - measured at
+    ~8,700 samples per check against ~100 series - with encoders shorter than
+    `encoder_length` and decoder targets landing throughout the span rather than
+    only at `origin`. The reported number is therefore a pooled rolling error
+    over the recent window, which is a smoother drift signal than a single
+    14-day forecast and is why it dominates walk cost (~11.8 s of ~13.1 s per
+    check).
+
+    Switching to `predict_mode=True` would give one full-encoder forecast per
+    series at `origin` and run ~34x faster, but it redefines the metric:
+    `calibrate_forecaster` derives `mase_mu`/`mase_sigma` - and hence the drift
+    threshold - through this same function, so the calibration would have to be
+    redone and no result would stay comparable to the runs already reported.
+    """
     fc = CONFIG["forecasting"]
     enc, pred = fc["encoder_length"], fc["prediction_length"]
     win_start = origin - pd.Timedelta(days=enc)
