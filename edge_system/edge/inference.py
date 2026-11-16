@@ -77,9 +77,30 @@ class LocalInference:
         self._data: Optional[Dict] = None
         self.version = ModelVersion()
         self.load_seconds: Optional[float] = None
+        self.sdft_alpha: Optional[float] = None
+        # Forecaster-specific provenance. `version.generation` counts BOTH
+        # models' retrains, so it cannot answer "when did the forecast last
+        # change?" on its own.
+        self.fc_generation: int = 0
+        self.fc_updated_at: Optional[float] = None
+        self.fc_updated_sim_date: Optional[str] = None
         self._env = None
         self._row_index: Dict[tuple, int] = {}
         self._inv_scale: float = 1.0
+        # What this node has actually seen trade, overlaid on the dataset for the
+        # SKUs it sells (see `apply_realised`). None until the first check.
+        self._realised_truth: Optional[pd.DataFrame] = None
+        self._realised_obs: Optional[pd.DataFrame] = None
+        self.realised_days: int = 0
+        self._realised_sku_set: set = set()
+        # Pricing drift signal (see `pricing_outcome`): the stock view each
+        # quote was priced against, by (sku, sim_date), so the after-the-day
+        # question is asked of the same state; and the critic's line onto
+        # the training reward, fitted once per pricer object.
+        self._quoted_inventory: Dict[tuple, float] = {}
+        self._critic_fit_for: Optional[int] = None
+        self._critic_line: Optional[tuple] = None
+        self._critic_lock = threading.Lock()
 
     # ── Startup ─────────────────────────────────────────────────────────────
 
@@ -125,6 +146,19 @@ class LocalInference:
             "meta": str(ckpt_dir / "base_meta.json"),
             "calibration": str(calib),
         })
+        # In place, AFTER load_base: load_base rebinds DRIFT_CONFIG["cl"] to the
+        # dict the forecaster holds (base_meta.json's alpha=0.5), so this is the
+        # one write the model actually reads. Read back off the model rather
+        # than trusted - a rebind instead of a mutation would leave the node
+        # silently retraining at 0.5.
+        alpha = float(SYSTEM_CONFIG["models"]["sdft_alpha"])
+        DRIFT_CONFIG["cl"]["sdft_alpha"] = alpha
+        got = base["forecaster"].cl_cfg.get("sdft_alpha")
+        if got != alpha:
+            raise RuntimeError(f"sdft_alpha did not reach the forecaster: it holds "
+                               f"{got!r}, expected {alpha!r}")
+        self.sdft_alpha = alpha
+
         self.ckpt_dir = str(ckpt_dir)
         self._forecaster = base["forecaster"]
         self._pricer = base["pricer"]
@@ -133,6 +167,9 @@ class LocalInference:
 
         self.load_seconds = time.perf_counter() - started
         self.version = ModelVersion(generation=0, source="base")
+        self.fc_generation = 0
+        self.fc_updated_at = self.version.loaded_at
+        self.fc_updated_sim_date = None          # None = the base checkpoint
 
     @property
     def ready(self) -> bool:
@@ -171,11 +208,15 @@ class LocalInference:
         }
 
     def swap(self, *, forecaster=None, pricer=None, source: str,
-             reason: Optional[str] = None) -> ModelVersion:
+             reason: Optional[str] = None,
+             sim_date: Optional[str] = None) -> ModelVersion:
         """Atomically replace the served models after a local retrain."""
         with self._swap_lock:
             if forecaster is not None:
                 self._forecaster = forecaster
+                self.fc_generation += 1
+                self.fc_updated_at = time.time()
+                self.fc_updated_sim_date = sim_date
             if pricer is not None:
                 self._pricer = pricer
             self.version = ModelVersion(
@@ -213,6 +254,7 @@ class LocalInference:
         # bare multiplier - see its _precompute().
         tier = float(env.price_tiers[action])
         base_price = float(env._base_price[idx])
+        self._remember_quote(sku, sim_date, inventory_level)
 
         return {
             "sku": sku,
@@ -224,8 +266,152 @@ class LocalInference:
             "model_generation": self.version.generation,
         }
 
+    #: Quantiles surfaced to the operator as the uncertainty band.
+    BAND = (0.1, 0.5, 0.9)
+    #: Days of realised demand returned alongside the forecast.
+    HISTORY_DAYS = 28
+
+    # ── Pricing drift signal: the pricer's own expectation vs the outcome ────
+    #
+    # The pricing counterpart of the forecast check. The forecaster is judged
+    # on its own predictions against what happened (MASE); the pricer carries
+    # its own prediction too - PPO's critic, V(s), the return it expects from a
+    # state - so it is judged the same way: the day's training reward, summed,
+    # against what the critic expected, summed.
+    #
+    # The critic is asked AFTER the day, with the demand that actually turned
+    # up (units requested, refused included - a shop sees those) in its demand
+    # slot instead of the forecast. Asked with the forecast it explained 18-46%
+    # of the reward and, like the revenue index it replaces, mostly tracked
+    # demand swings; with hindsight demand, day-to-day demand noise sits on both
+    # sides and cancels, leaving how well the price did. Replayed on 2013-2014
+    # through this node's detector (scratch: critic_compare.py): it caught a
+    # pricer stuck at -10% 13/15 times and a world 2x more price-sensitive than
+    # trained 12/15, where the revenue index caught 4/15 and 1/15, at a similar
+    # 2-3.5 retrains a year on normal trading. No true demand curve is used:
+    # only the node's own critic, its quotes, and the orders it saw.
+    #
+    # The pricer was trained on a contextual bandit (its price never changes
+    # the next state), so V(s) = expected reward today + a near-constant
+    # future term. The line r = a + b V, fitted on the training window from
+    # training data alone, turns V into an expected day's reward; the monitor's
+    # warm-up absorbs whatever offset the live world adds (the sim applies raw
+    # elasticity, the env a normalised one).
+
+    #: Quotes kept for the after-the-day question, in days.
+    QUOTE_DAYS = 3
+
+    def _remember_quote(self, sku: str, sim_date: str, inventory_level: float) -> None:
+        with self._critic_lock:
+            self._quoted_inventory[(sku, sim_date)] = float(inventory_level)
+            if len(self._quoted_inventory) > 4096:            # bounded; oldest dates first
+                keep = sorted({d for _, d in self._quoted_inventory})[-self.QUOTE_DAYS:]
+                self._quoted_inventory = {k: v for k, v in self._quoted_inventory.items()
+                                          if k[1] in keep}
+
+    @staticmethod
+    def _reward(env, idx, price, sold, lost):
+        """DynamicPricingEnv.step's reward, for given units (arrays)."""
+        cost = env._unit_cost[idx]
+        if env.inventory_constrained:
+            r = (price - cost) * sold - env.lost_sale_penalty * price * lost
+        else:
+            r = (price - cost) * sold - 0.15 * price * sold * env._stockout[idx]
+        return np.clip(r / 1000.0, -5.0, 5.0)
+
+    def _critic_values(self, pricer, obs: np.ndarray) -> np.ndarray:
+        import torch  # noqa: PLC0415
+        with torch.no_grad():
+            t = torch.as_tensor(obs, dtype=torch.float32, device=pricer.policy.device)
+            return pricer.policy.predict_values(t).cpu().numpy().ravel()
+
+    def critic_line(self) -> tuple:
+        """(a, b) with expected reward = a + b V(s), fitted on the training
+        window for the pricer now served. Refitted after a pricer swap (the new
+        critic has its own scale); a few seconds over ~60k rows."""
+        pricer = self.pricer()
+        with self._critic_lock:
+            if self._critic_fit_for == id(pricer) and self._critic_line is not None:
+                return self._critic_line
+        import torch  # noqa: PLC0415
+        env = self._shared_env()
+        base_dates = pd.to_datetime(self.data["rl_base"]["date"]).unique()
+        idx = np.flatnonzero(pd.to_datetime(env.df["date"]).isin(base_dates).to_numpy())
+        obs = np.stack([env._get_obs(int(i)) for i in idx]).astype(np.float32)
+        with torch.no_grad():
+            t = torch.as_tensor(obs, device=pricer.policy.device)
+            acts = pricer.policy._predict(t, deterministic=True).cpu().numpy().ravel()
+        tiers = np.asarray(env.price_tiers, dtype=float)[acts]
+        base = env._base_price[idx].astype(float)
+        price = base * (1.0 + tiers)
+        demand = np.maximum(env._realized_demand[idx].astype(float), 0.0)
+        asked = np.maximum(0.0, np.round(demand * (price / np.maximum(base, 1e-6))
+                                         ** env._elasticity[idx].astype(float)))
+        stock = env._inventory_raw[idx].astype(float) if env.inventory_constrained else asked
+        sold = np.minimum(asked, stock)
+        r = self._reward(env, idx, price, sold, asked - sold)
+        obs[:, self._OBS_DEMAND_FORECAST] = asked / self._demand_divisor(env)
+        v = self._critic_values(pricer, obs)
+        b, a = np.polyfit(v, r, 1)
+        line = (float(a), float(b))
+        with self._critic_lock:
+            self._critic_fit_for, self._critic_line = id(pricer), line
+        return line
+
+    @staticmethod
+    def _demand_divisor(env) -> float:
+        dmax = float(np.max(env.df["demand_forecast"].to_numpy(dtype=float)))
+        return dmax if dmax > 0 else 1.0
+
+    def pricing_outcome(self, *, sim_date: str, outcomes, share: float) -> Optional[tuple]:
+        """(actual, expected) training reward over one channel's day.
+
+        `outcomes` holds, per SKU, the price charged and the units requested /
+        sold / refused at this channel. The channel sees `share` of each SKU's
+        demand, so units are scaled up by 1/share onto the SKU-level demand the
+        pricer was trained on (the ratio is unaffected; the critic's demand slot
+        is not). None when nothing traded."""
+        if share <= 0:
+            return None
+        env = self._shared_env()
+        day = pd.Timestamp(sim_date)
+        rows, price, asked, sold, lost, inv = [], [], [], [], [], []
+        for o in outcomes:
+            i = self._row_index.get((o["sku"], day))
+            if i is None or o.get("price") is None:
+                continue
+            rows.append(i)
+            price.append(float(o["price"]))
+            asked.append(float(o["requested"]) / share)
+            sold.append(float(o["sold"]) / share)
+            lost.append(float(o["refused"]) / share)
+            with self._critic_lock:
+                q = self._quoted_inventory.get((o["sku"], sim_date))
+            inv.append(float(env._inventory_raw[i]) if q is None else q)
+        if not rows:
+            return None
+        a, b = self.critic_line()
+        rows_a = np.asarray(rows)
+        r = self._reward(env, rows_a, np.asarray(price), np.asarray(sold), np.asarray(lost))
+        obs = np.stack([self._observation(env, i, q, d) for i, q, d in zip(rows, inv, asked)])
+        v = self._critic_values(self.pricer(), obs)
+        return float(np.sum(r)), float(np.sum(a + b * v))
+
     def forecast(self, sku: str, *, sim_date: str) -> Dict:
-        """Local TFT forecast for one SKU as of `sim_date`."""
+        """
+        The next `prediction_length` days of demand for one SKU, as seen on
+        `sim_date`, with a p10-p90 band.
+
+        Forward-looking: the encoder ends ON `sim_date` and the decoder covers
+        the following days. The decoder still needs those days' known
+        covariates (calendar, sell_price, snap, events) - which a retailer has in
+        advance - but never their demand: `demand` is the only unknown real, and
+        TFT reads unknowns from the encoder alone.
+
+        (The previous version anchored the window to END on `sim_date`, i.e. it
+        "forecast" the fortnight that had just happened. Nothing called it, so
+        nothing depended on that.)
+        """
         import torch  # noqa: PLC0415
         from drift_pipeline.trainers import (  # noqa: PLC0415
             make_tft_dataset, filter_tft_eval_frame,
@@ -233,31 +419,180 @@ class LocalInference:
         from drift_pipeline.core_pipeline import CONFIG as DRIFT_CONFIG
 
         fc_cfg = DRIFT_CONFIG["forecasting"]
-        end = pd.Timestamp(sim_date)
-        start = end - pd.Timedelta(days=fc_cfg["encoder_length"] + fc_cfg["prediction_length"])
+        enc, horizon = fc_cfg["encoder_length"], fc_cfg["prediction_length"]
+        origin = pd.Timestamp(sim_date)
+        start = origin - pd.Timedelta(days=enc)            # exclusive
+        end = origin + pd.Timedelta(days=horizon)          # inclusive
 
-        df = self.data["tft_full"]
+        # A SKU this node trades is forecast from what it has observed selling,
+        # so a demand shock shows up in the forecast; others from the dataset.
+        obs = self._realised_obs
+        df = obs if obs is not None and sku in self._realised_skus else self.data["tft_full"]
         window = df[(df["product_id"] == sku) & (df["date"] > start) & (df["date"] <= end)]
         window = filter_tft_eval_frame(window)
         if window.empty:
-            # Deliberate: short series return NaN rather than raising, matching
-            # the offline pipeline's behaviour so metrics stay comparable.
-            return {"sku": sku, "forecast": None,
-                    "reason": "insufficient history for encoder+prediction length"}
+            # Deliberate: short series return no forecast rather than raising,
+            # matching the offline pipeline's NaN-not-crash behaviour.
+            return {"sku": sku, "forecast": None, "daily": [],
+                    "reason": "insufficient history for encoder+prediction length",
+                    **self._forecaster_meta()}
 
         ds = make_tft_dataset(window, train=False, training_dataset=self._train_ds,
                               predict_mode=True)
         loader = ds.to_dataloader(train=False, batch_size=64, num_workers=0)
         model = self.forecaster()
         with torch.no_grad():
-            preds = model.predict(loader, mode="prediction")
-        arr = np.asarray(preds.cpu() if hasattr(preds, "cpu") else preds, dtype=float)
+            q = model.predict(loader, mode="quantiles")
+        q = np.asarray(q.cpu() if hasattr(q, "cpu") else q, dtype=float)[0]  # (horizon, n_q)
+
+        # Recent realised demand, for context on the chart. Only days up to and
+        # including `sim_date` - what the node has actually observed.
+        seen = window[window["date"] <= origin].tail(self.HISTORY_DAYS)
+        history = [{"date": pd.Timestamp(d).strftime("%Y-%m-%d"), "actual": float(v)}
+                   for d, v in zip(seen["date"], seen["demand"])]
+
+        levels = [float(x) for x in model.loss.quantiles]
+        idx = {b: levels.index(b) for b in self.BAND}
+        dates = pd.date_range(origin + pd.Timedelta(days=1), periods=q.shape[0], freq="D")
+        # Demand is a count: a negative quantile is a regression artefact, not
+        # information, and would draw a band below zero.
+        daily = [{"date": d.strftime("%Y-%m-%d"),
+                  "p10": max(0.0, q[i, idx[0.1]]),
+                  "p50": max(0.0, q[i, idx[0.5]]),
+                  "p90": max(0.0, q[i, idx[0.9]])}
+                 for i, d in enumerate(dates)]
         return {
             "sku": sku,
-            "forecast": float(np.nanmean(arr)),
-            "horizon": fc_cfg["prediction_length"],
-            "model_generation": self.version.generation,
+            "as_of": origin.strftime("%Y-%m-%d"),
+            "horizon": int(q.shape[0]),
+            # Kept for older callers: mean daily p50 over the horizon.
+            "forecast": float(np.mean([r["p50"] for r in daily])),
+            "total_p50": float(sum(r["p50"] for r in daily)),
+            "daily": daily,
+            "history": history,
+            **self._forecaster_meta(),
         }
+
+    def _forecaster_meta(self) -> Dict:
+        """When the forecaster being served was last changed - the operator's
+        'last updated', which is NOT the same as the node's model generation
+        (a pricer retrain bumps that too)."""
+        return {
+            "model_generation": self.version.generation,
+            "forecaster_generation": self.fc_generation,
+            "forecaster_updated_at": self.fc_updated_at,
+            "forecaster_updated_sim_date": self.fc_updated_sim_date,
+        }
+
+    def realised_mase(self, *, sim_date: str) -> Optional[float]:
+        """
+        This node's forecast error on demand it has ALREADY observed.
+
+        The offline walk scores `window_forecast_error(origin)` over
+        `[origin - enc, origin + pred)` - it looks ahead of its origin, which is
+        fine offline. A deployed node on `sim_date` only knows demand up to that
+        day, so the same window is anchored to END on `sim_date`: origin =
+        sim_date - (pred - 1). Same function, same pooled-rolling definition the
+        drift threshold was calibrated on, only realised data.
+        """
+        from drift_pipeline import base_training as bt  # noqa: PLC0415
+        from drift_pipeline.core_pipeline import CONFIG as DRIFT_CONFIG
+
+        pred = DRIFT_CONFIG["forecasting"]["prediction_length"]
+        origin = pd.Timestamp(sim_date) - pd.Timedelta(days=pred - 1)
+        out = bt.window_forecast_error(self.forecaster(), self.data["tft_full"],
+                                       self._train_ds, self.data["tft_base"], origin)
+        m = out.get("mase")
+        return float(m) if m is not None and np.isfinite(m) else None
+
+    # ── Realised demand (the live forecaster check) ─────────────────────────
+
+    @property
+    def _realised_skus(self) -> set:
+        f = self._realised_obs
+        return set() if f is None else self._realised_sku_set
+
+    def apply_realised(self, daily: Dict[str, list], *, share: float) -> int:
+        """Overlay what this node has seen trade onto the dataset, for the SKUs
+        it sells. Returns how many realised days the overlay covers.
+
+        `daily` is the inventory service's per-SKU series for THIS node's
+        channel. A node forecasts SKU-level demand but only sees its own
+        channel, so its counts are scaled up by the channel's share - an edge
+        node estimating the whole from its part, which is also why each node's
+        drift signal (and so its retrain timing) differs.
+
+        Two frames, following E2's rule (drift_pipeline/censoring.py):
+          truth - everything customers ORDERED, granted or refused. The check's
+                  yardstick: a demand shock moves it.
+          obs   - what was SOLD. Refused orders never become sales, so this is
+                  censored demand. Training and the shown forecast use it,
+                  because a deployed node cannot record what it refused.
+        Days not yet traded keep the dataset's history - what the node knew at
+        deployment.
+        """
+        if not daily:
+            return 0
+        skus = sorted(daily)
+        base = self.data["tft_full"]
+        frame = base[base["product_id"].isin(skus)].copy()
+        if frame.empty:
+            return 0
+        rows = [(sku, pd.Timestamp(r["sim_date"]), r.get("ordered", 0), r.get("sold", 0))
+                for sku, series in daily.items() for r in series]
+        real = pd.DataFrame(rows, columns=["product_id", "date", "ordered", "sold"])
+        real["date"] = pd.to_datetime(real["date"])
+        scale = 1.0 / max(share, 1e-6)
+        key = frame[["product_id", "date"]].copy()
+        key["date"] = pd.to_datetime(key["date"])
+        merged = key.merge(real, on=["product_id", "date"], how="left")
+        if len(merged) != len(frame):
+            raise ValueError("realised overlay changed the row count")
+        seen = merged["ordered"].notna().to_numpy()
+        truth, obs = frame.copy(), frame.copy()
+        truth.loc[seen, "demand"] = merged.loc[seen, "ordered"].to_numpy(float) * scale
+        obs.loc[seen, "demand"] = merged.loc[seen, "sold"].to_numpy(float) * scale
+        with self._swap_lock:
+            self._realised_truth, self._realised_obs = truth, obs
+            self._realised_sku_set = set(skus)
+            # The retrain controller reads this key (drift_pipeline/retrain.py
+            # `_recent_tft`): it fine-tunes on the observed, censored sales of
+            # the SKUs this node trades.
+            self._data["tft_full_censored"] = obs
+        self.realised_days = int(real["date"].nunique())
+        return self.realised_days
+
+    def realised_forecast_error(self, *, sim_date: str) -> Optional[float]:
+        """MASE of the forecast this node would have issued `prediction_length`
+        days ago, against realised demand since - for the SKUs it trades.
+
+        One full-encoder forecast per SKU (predict_mode), anchored so its last
+        decoder day is `sim_date`. Unlike `realised_mase`, which pools every
+        window across a ~74-day span of all 100 dataset series (slow, and a
+        10-day shock on 10 of them barely moves it), this reacts within days
+        and costs ~0.06 s. It is NOT the metric the offline threshold was
+        calibrated on, so the monitor calibrates its own (models.fc_signal).
+        """
+        from drift_pipeline.core_pipeline import CONFIG as DRIFT_CONFIG  # noqa: PLC0415
+        from drift_pipeline.trainers import (  # noqa: PLC0415
+            evaluate_forecasting, filter_tft_eval_frame, make_tft_dataset,
+        )
+        truth = self._realised_truth
+        if truth is None:
+            return None
+        fc = DRIFT_CONFIG["forecasting"]
+        end = pd.Timestamp(sim_date)
+        lo = end - pd.Timedelta(days=fc["prediction_length"] + fc["encoder_length"] - 1)
+        window = filter_tft_eval_frame(truth[(truth["date"] >= lo) & (truth["date"] <= end)])
+        if window.empty:
+            return None
+        ds = make_tft_dataset(window, train=False, training_dataset=self._train_ds,
+                              predict_mode=True)
+        loader = ds.to_dataloader(train=False, shuffle=False, batch_size=64, num_workers=0)
+        base = self.data["tft_base"]
+        scale_df = base[base["product_id"].isin(self._realised_sku_set)]
+        m = evaluate_forecasting(self.forecaster(), loader, scale_df, task_id=0).get("mase")
+        return float(m) if m is not None and np.isfinite(m) else None
 
     # ── Internals ───────────────────────────────────────────────────────────
 
