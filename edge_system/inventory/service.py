@@ -273,6 +273,12 @@ def stock(sku: str) -> StockResponse:
     )
 
 
+@app.get("/skus")
+def skus() -> List[str]:
+    """The catalogue this pool holds, so a client need not be told it."""
+    return sorted(STATE.require().counter.skus)
+
+
 @app.get("/metrics")
 def metrics() -> Dict:
     policy = STATE.require()
@@ -291,6 +297,15 @@ def events(limit: int = 100, kind: Optional[str] = None) -> List[Dict]:
     if STATE.events is None:
         raise HTTPException(503, "not started")
     return STATE.events.recent(limit=limit, kind=kind)
+
+
+@app.get("/daily")
+def daily(days: int = 28, node: Optional[str] = None) -> Dict[str, List[Dict]]:
+    """Per-SKU daily sold / refused / ordered / closing stock. All channels for
+    the dashboard; one channel (`node`) for that edge node's forecaster."""
+    if STATE.events is None:
+        raise HTTPException(503, "not started")
+    return STATE.events.daily_by_sku(days=days, node=node)
 
 
 @app.get("/health")
@@ -323,8 +338,12 @@ def health() -> Dict:
 
 
 @app.post("/admin/reset")
-def admin_reset(policy: Optional[str] = None) -> Dict:
-    """Wipe state between experiment cells."""
+def admin_reset(policy: Optional[str] = None, clear_events: bool = False) -> Dict:
+    """Wipe state between experiment cells. `clear_events` also empties the
+    event log - the interactive simulator's "reset run"; experiment sweeps keep
+    it, because their cells are told apart by policy and tick."""
+    if clear_events and STATE.events is not None:
+        STATE.events.clear()
     STATE.reset(policy_name=policy)
     return {"ok": True, "policy": STATE.policy.name, "backend": STATE.backend}
 
