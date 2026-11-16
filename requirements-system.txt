@@ -19,3 +19,4 @@ pydantic>=2.9
 redis>=5.2          # shared stock pool; server via `docker compose up -d redis`
 psutil>=6.0         # E4 memory-footprint instrumentation
 pytest>=8.0
+playwright>=1.49     # dashboard browser tests (FYP_E2E=1); drives the installed Edge, no browser download
