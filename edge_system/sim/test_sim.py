@@ -209,6 +209,33 @@ def test_sku_order_is_stable(gen):
     assert gen.skus(limit=1) == ["A"]
 
 
+def _frame(spec):
+    """spec: sku -> (mean demand, zero-demand day indexes) over 60 days."""
+    dates = pd.date_range("2013-01-01", periods=60, freq="D")
+    return pd.DataFrame([{"date": d, "product_id": sku,
+                          "realized_demand": 0.0 if i in zeros else demand,
+                          "base_price": 2.0, "elasticity_coefficient": -1.0,
+                          "competitor_price": 2.1}
+                         for sku, (demand, zeros) in spec.items() for i, d in enumerate(dates)])
+
+
+def test_top_skus_skip_lines_that_vanish_from_the_shelf():
+    g = OrderGenerator(_frame({"F3_1": (30.0, range(10, 40)),   # best seller, gone 30 days
+                               "F3_2": (10.0, ()), "F3_3": (5.0, range(0, 60, 7))}))
+    assert g.skus(order="top") == ["F3_1", "F3_2", "F3_3"]
+    assert g.skus(order="top", max_gap_days=21) == ["F3_2", "F3_3"]
+    # Outside the window the gap does not count.
+    assert g.skus(order="top", max_gap_days=21, window=("2013-02-10", "2013-03-01"))[0] == "F3_1"
+
+
+def test_top_skus_take_at_most_n_per_department():
+    g = OrderGenerator(_frame({"FOODS_3_1": (30.0, ()), "FOODS_3_2": (20.0, ()),
+                               "FOODS_3_3": (15.0, ()), "FOODS_2_1": (2.0, ()),
+                               "FOODS_1_1": (1.0, ())}))
+    assert g.skus(order="top", limit=4, per_dept=2) == ["FOODS_3_1", "FOODS_3_2", "FOODS_2_1", "FOODS_1_1"]
+    assert g.skus(order="top", limit=4) == ["FOODS_3_1", "FOODS_3_2", "FOODS_3_3", "FOODS_2_1"]
+
+
 # ─── Config propagation ──────────────────────────────────────────────────────
 #
 # Regression tests for a bug that produced complete, well-formed, wrong results:
@@ -246,7 +273,7 @@ def test_manifest_covers_every_config_section_a_child_process_reads():
     pattern = re.compile(r'SYSTEM_CONFIG\[[\'"](\w+)[\'"]\]')
 
     found = {}
-    for sub in ("inventory", "edge", "control"):
+    for sub in ("inventory", "edge", "control", "gateway"):
         for path in (root / sub).glob("*.py"):
             if path.name.startswith("test_"):
                 continue

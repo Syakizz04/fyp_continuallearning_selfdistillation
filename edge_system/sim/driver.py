@@ -90,8 +90,12 @@ class SimulationDriver:
             seed=sim["seed"], mean_basket=sim["mean_basket"],
             channel_weights={c["name"]: c["weight"] for c in cfg["channels"]},
         )
-        self.skus = self.gen.skus(limit=sim.get("n_skus"))
         self.clock = SimClock.from_config(sim, available_dates=self.gen.dates)
+        self.skus = self.gen.skus(limit=sim.get("n_skus"),
+                                  order=sim.get("sku_select", "stable"),
+                                  max_gap_days=sim.get("sku_max_gap_days"),
+                                  per_dept=sim.get("sku_per_dept"),
+                                  window=(self.clock.dates[0], self.clock.dates[-1]))
 
         self.inventory = httpx.Client(base_url=inventory_url(), timeout=30.0)
         self.control = httpx.Client(base_url=control_url(), timeout=10.0)
@@ -109,6 +113,13 @@ class SimulationDriver:
         self.delay_ms = float(cfg["network"]["delay_ms"])
         self._targets: Dict[str, int] = {}
         self._reorder: Dict[str, int] = {}
+        # Interactive-simulator hooks. Both are inert unless set, so the
+        # experiment path (`run`) is unchanged by their existence.
+        #   price_book[(sku, channel)] = (price, tier, generation): the price the
+        #     operator's decisions put live, used instead of asking the node.
+        #   demand_multiplier(sku, tick) -> float: a demand shock.
+        self.price_book: Optional[Dict[tuple, tuple]] = None
+        self.demand_multiplier = None
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -149,19 +160,7 @@ class SimulationDriver:
                   f"| pricing={self.pricing}")
 
         for tick in self.clock:
-            self._apply_network_schedule(tick)
-            self.inventory.post("/sweep")
-            self._replenish(tick)
-            per_channel = {ch: TickRecord(tick=tick.index, sim_date=tick.date_str,
-                                          channel=ch, policy=self.policy_name,
-                                          delay_ms=self.delay_ms)
-                           for ch in self.channels}
-            for sku in self.skus:
-                self._trade_sku(sku, tick, per_channel)
-            self._finalise(per_channel)
-            self._check_drift(tick, per_channel)
-            self.records.extend(per_channel.values())
-
+            per_channel = self.trade_day(tick)
             if tick.index % 10 == 0 or tick.is_last:
                 sold = sum(r.units_committed for r in per_channel.values())
                 self._log(f"tick {tick.index:>4} {tick.date_str} sold={sold}")
@@ -169,6 +168,28 @@ class SimulationDriver:
         path = self.write_results()
         self._log(f"done in {self.clock.elapsed_s:.1f}s -> {path}")
         return path
+
+    def trade_day(self, tick: Tick) -> Dict[str, TickRecord]:
+        """
+        One simulated day, start to finish. `run` loops this; the interactive
+        simulator (sim/service.py) calls it one day at a time.
+        """
+        self._apply_network_schedule(tick)
+        self.inventory.post("/sweep")
+        self._replenish(tick)
+        per_channel = {ch: TickRecord(tick=tick.index, sim_date=tick.date_str,
+                                      channel=ch, policy=self.policy_name,
+                                      delay_ms=self.delay_ms)
+                       for ch in self.channels}
+        # Per channel, per SKU: the price charged and what came of it. The node
+        # judges its pricer on these (see LocalInference.pricing_outcome).
+        self._outcomes: Dict[str, Dict[str, Dict]] = {ch: {} for ch in self.channels}
+        for sku in self.skus:
+            self._trade_sku(sku, tick, per_channel)
+        self._finalise(per_channel)
+        self._check_drift(tick, per_channel)
+        self.records.extend(per_channel.values())
+        return per_channel
 
     def _apply_network_schedule(self, tick: Tick) -> None:
         """
@@ -224,6 +245,8 @@ class SimulationDriver:
                 rec.quote_failures += 1
                 continue
             price, tier, generation = quote
+            self._outcomes[ch][sku] = {"sku": sku, "price": float(price),
+                                       "requested": 0, "sold": 0, "refused": 0}
             rec.mean_price += price
             rec.mean_tier += tier
             rec.model_generation = max(rec.model_generation, generation)
@@ -235,7 +258,13 @@ class SimulationDriver:
                 rec.mean_stock_estimate += stock["stock_estimates"].get(ch, 0)
                 rec.mean_estimate_error += stock["estimate_errors"].get(ch, 0)
 
-            for order in self.gen.orders(sku, tick.date, ch, price, tick=tick.index):
+            weight = None
+            if self.demand_multiplier is not None:
+                mult = float(self.demand_multiplier(sku, tick))
+                if mult != 1.0:
+                    weight = self.gen.channel_weights.get(ch, 1.0) * mult
+            for order in self.gen.orders(sku, tick.date, ch, price, tick=tick.index,
+                                         weight=weight):
                 self._place(order, rec)
 
     def _quote(self, channel: str, sku: str, tick: Tick, row: Dict):
@@ -249,6 +278,8 @@ class SimulationDriver:
         """
         if self.pricing == "static":
             return row["base_price"], 0.0, 0
+        if self.price_book is not None and (sku, channel) in self.price_book:
+            return self.price_book[(sku, channel)]
 
         try:
             r = self.nodes[channel].get(
@@ -263,6 +294,9 @@ class SimulationDriver:
     def _place(self, order, rec: TickRecord) -> None:
         rec.orders += 1
         rec.units_requested += order.qty
+        out = getattr(self, "_outcomes", {}).get(order.channel, {}).get(order.sku)
+        if out is not None:
+            out["requested"] += order.qty
         try:
             r = self.inventory.post("/reserve", json={
                 "node": order.channel, "sku": order.sku, "qty": order.qty,
@@ -271,11 +305,15 @@ class SimulationDriver:
             res = r.json()
         except httpx.HTTPError:
             rec.units_refused += order.qty
+            if out is not None:
+                out["refused"] += order.qty
             return
 
         rec.reserve_latency_ms += float(res.get("latency_ms", 0.0))
         if not res["granted"]:
             rec.units_refused += order.qty
+            if out is not None:
+                out["refused"] += order.qty
             return
 
         rec.units_granted += order.qty
@@ -286,6 +324,8 @@ class SimulationDriver:
             self.inventory.post("/commit", json={"reservation_id": res["reservation_id"]})
             rec.units_committed += order.qty
             rec.revenue += order.value
+            if out is not None:
+                out["sold"] += order.qty
 
     def _finalise(self, per_channel: Dict[str, TickRecord]) -> None:
         """Turn the running sums into per-tick means."""
@@ -322,7 +362,12 @@ class SimulationDriver:
             try:
                 self.nodes[ch].post("/check", json={
                     "tick": tick.index, "sim_date": tick.date_str,
-                    "profit_index": profit_index, "blocking": False})
+                    "profit_index": profit_index, "blocking": False,
+                    # The parts, so a rolling monitor can sum before dividing.
+                    "revenue": rec.revenue, "reference": reference,
+                    # Per SKU, for the node's own judgement of its pricer
+                    # (models.rl_signal = "critic"); the node ignores it otherwise.
+                    "pricing": list(getattr(self, "_outcomes", {}).get(ch, {}).values())})
             except httpx.HTTPError:
                 pass
 
