@@ -19,6 +19,7 @@ Run:  uvicorn edge_system.edge.service:app --port 8010
 from __future__ import annotations
 
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
@@ -27,10 +28,16 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
-from ..config import SYSTEM_CONFIG, inventory_url, control_url
+from ..config import SYSTEM_CONFIG, channel, inventory_url, control_url
 from .inference import LocalInference
 from .monitor_local import LocalDriftMonitor
 from .retrain_local import LocalRetrainer
+
+# One pooled client for every call this node makes. A bare `httpx.get` builds a
+# fresh client - SSL context, certificate bundle and all - per request, which
+# costs ~1 s on Windows; /price called it per SKU, so a 10-SKU, 3-channel day
+# took ~30 s instead of well under one. A shared client reuses the connection.
+HTTP = httpx.Client()
 
 
 class CheckRequest(BaseModel):
@@ -38,6 +45,14 @@ class CheckRequest(BaseModel):
     sim_date: str
     mase: Optional[float] = None
     profit_index: Optional[float] = None
+    # The day's revenue and its base-price reference, of which profit_index is
+    # the ratio. Only the rolling RL detector reads them.
+    revenue: Optional[float] = None
+    reference: Optional[float] = None
+    # Per SKU at this channel: {sku, price, requested, sold, refused}. With
+    # models.rl_signal = "critic" the node judges its pricer on these instead
+    # (LocalInference.pricing_outcome) and revenue/reference above are unused.
+    pricing: Optional[List[Dict]] = None
     # The experiment scripts set this so a retrain lands before the next tick is
     # evaluated; the live system leaves it False so serving is never blocked.
     blocking: bool = False
@@ -53,6 +68,11 @@ class EdgeNode:
         self.monitor: Optional[LocalDriftMonitor] = None
         self.retrainer: Optional[LocalRetrainer] = None
         self.started_at: float = 0.0
+        # The monitor is now fed from two threads (the request, and the weekly
+        # forecast check), and DebouncedDetector streaks are read-modify-write.
+        self.monitor_lock = threading.Lock()
+        self._fc_check_thread: Optional[threading.Thread] = None
+        self.last_fc_check: Optional[Dict] = None
 
     def start(self) -> None:
         self.inference = LocalInference(self.name)
@@ -69,11 +89,80 @@ class EdgeNode:
             raise HTTPException(503, "node still loading models")
         return self.inference
 
+    # ── Weekly forecast check ───────────────────────────────────────────────
+
+    def fc_check_due(self, tick: int) -> bool:
+        every = int(SYSTEM_CONFIG["models"]["fc_check_every_ticks"])
+        return every > 0 and tick > 0 and tick % every == 0
+
+    def run_fc_check(self, tick: int, sim_date: str) -> List[Dict]:
+        """Score the forecaster on realised demand and feed it to the monitor.
+
+        Returns the retrains it triggered. Synchronous; `schedule_fc_check` is
+        the non-blocking wrapper the live system uses.
+        """
+        inf = self.require()
+        started = time.time()
+        if SYSTEM_CONFIG["models"].get("fc_signal", "dataset") == "realised":
+            mase = self._realised_error(inf, sim_date)
+        else:
+            mase = inf.realised_mase(sim_date=sim_date)
+        self.last_fc_check = {"tick": tick, "sim_date": sim_date, "mase": mase,
+                              "seconds": time.time() - started, "ts": time.time(),
+                              "realised_days": inf.realised_days}
+        if mase is None:
+            return []
+        with self.monitor_lock:
+            events = self.monitor.update(tick=tick, sim_date=sim_date, mase=mase)
+        return [self.retrainer.on_drift(e).as_dict()
+                for e in events if e.kind == "forecasting"]
+
+    #: Realised days fetched per check: the encoder (60) + horizon (14), and the
+    #: retrain's 8 recent weeks padded by an encoder - see retrain._recent_tft.
+    REALISED_DAYS = 130
+
+    def _realised_error(self, inf: LocalInference, sim_date: str) -> Optional[float]:
+        """Refresh this node's view of what it has sold, then score the
+        forecaster on it. None until a whole forecast horizon has traded - an
+        earlier window would still be part dataset, part simulation."""
+        from drift_pipeline.core_pipeline import CONFIG as DRIFT_CONFIG  # noqa: PLC0415
+        # Channel weights are launch topology (like the ports every process
+        # reads), and no scenario overrides them - so this child's copy is the
+        # supervisor's, which is not true of the manifest sections.
+        share = channel(self.name)["weight"]
+        try:
+            daily = HTTP.get(f"{inventory_url()}/daily", timeout=10.0,
+                             params={"days": self.REALISED_DAYS, "node": self.name}).json()
+        except Exception:  # noqa: BLE001 - no data is no signal, not a crash
+            return None
+        if inf.apply_realised(daily, share=share) < DRIFT_CONFIG["forecasting"]["prediction_length"]:
+            return None
+        return inf.realised_forecast_error(sim_date=sim_date)
+
+    def schedule_fc_check(self, tick: int, sim_date: str) -> bool:
+        """Run the check in the background; skip if the previous one is still
+        going. A scoring pass takes seconds, and a backed-up queue of them would
+        score weeks that are already stale by the time they run."""
+        t = self._fc_check_thread
+        if t is not None and t.is_alive():
+            return False
+        self._fc_check_thread = threading.Thread(
+            target=self.run_fc_check, args=(tick, sim_date),
+            name=f"fc-check-{self.name}", daemon=True)
+        self._fc_check_thread.start()
+        return True
+
     def _register_version(self, record) -> None:
         """Tell the control plane a new model generation is live. Best-effort:
         the node must keep serving even if the control plane is down."""
+        if record.ok and self.monitor is not None:
+            with self.monitor_lock:
+                if record.kind == "rl":
+                    self.monitor.recalibrate_rl()
+                else:
+                    self.monitor.recalibrate_fc()
         try:
-            httpx.post(f"{control_url()}/models/register", timeout=2.0, json={
+            HTTP.post(f"{control_url()}/models/register", timeout=2.0, json={
                 "node": self.name, "strategy": self.strategy,
                 **record.as_dict(),
             })
@@ -123,7 +212,7 @@ def price(sku: str, sim_date: str,
     if stale_view is None:
         source = "node_estimate"
         try:
-            r = httpx.get(f"{inventory_url()}/stock/{sku}", timeout=2.0)
+            r = HTTP.get(f"{inventory_url()}/stock/{sku}", timeout=2.0)
             r.raise_for_status()
             stale_view = float(r.json()["stock_estimates"].get(NODE.name, 0.0))
         except Exception as exc:  # noqa: BLE001
@@ -157,20 +246,74 @@ def check(req: CheckRequest) -> Dict:
     if NODE.monitor is None or NODE.retrainer is None:
         raise HTTPException(503, "node not started")
 
-    events = NODE.monitor.update(
-        tick=req.tick, sim_date=req.sim_date,
-        mase=req.mase, profit_index=req.profit_index,
-    )
+    profit_index, revenue, reference = req.profit_index, req.revenue, req.reference
+    # Rolling mode only: the fixed detector holds one day against a floor of
+    # 1.0, which is calibrated to the revenue index and means nothing here.
+    if (SYSTEM_CONFIG["models"].get("rl_signal", "revenue") == "critic"
+            and NODE.monitor.rl_mode == "rolling"
+            and req.pricing is not None and NODE.inference is not None):
+        # Outside the monitor lock: a few ms normally, seconds once per pricer
+        # (the critic's line is refitted for a new one).
+        got = NODE.inference.pricing_outcome(
+            sim_date=req.sim_date, outcomes=req.pricing,
+            share=float(channel(NODE.name).get("weight", 1.0)))
+        if got is None:
+            profit_index = revenue = reference = None      # nothing traded: no reading
+        else:
+            revenue, reference = got
+            profit_index = revenue / reference if reference > 0 else None
+
+    with NODE.monitor_lock:
+        events = NODE.monitor.update(
+            tick=req.tick, sim_date=req.sim_date,
+            mase=req.mase, profit_index=profit_index,
+            revenue=revenue, reference=reference,
+        )
     triggered = [
         NODE.retrainer.on_drift(e, blocking=req.blocking).as_dict()
         for e in events
     ]
+
+    # The driver reports profit only, so without this the forecasting detector
+    # never sees a value and the forecaster can never retrain. A caller that
+    # supplies its own MASE (an experiment script) is taken at its word.
+    fc_check = None
+    if req.mase is None and NODE.fc_check_due(req.tick):
+        if req.blocking:
+            triggered += NODE.run_fc_check(req.tick, req.sim_date)
+            fc_check = "ran"
+        else:
+            fc_check = ("scheduled" if NODE.schedule_fc_check(req.tick, req.sim_date)
+                        else "skipped_busy")
+
     return {
         "node": NODE.name,
         "events": [e.as_dict() for e in events],
         "retrains": triggered,
+        "fc_check": fc_check,
         "monitor": NODE.monitor.status(),
     }
+
+
+@app.post("/admin/reset")
+def admin_reset() -> Dict:
+    """Back to the base checkpoints with an empty drift monitor - the interactive
+    simulator's "reset run". Reloads from disk rather than keeping a pristine
+    copy in memory: a fine-tune may share tensors with the model it started
+    from, and a reset that quietly kept a retrained weight would be worse than
+    none. Synchronous; takes as long as a cold start."""
+    if NODE.retrainer is not None and NODE.retrainer.busy:
+        raise HTTPException(409, "a retrain is in flight; try again when it finishes")
+    with NODE.monitor_lock:
+        # Drop the old models before loading new ones: two copies side by side
+        # is ~1 GB extra per node, which a demo laptop running three does not have.
+        NODE.inference = NODE.monitor = NODE.retrainer = None
+        import gc  # noqa: PLC0415
+        gc.collect()
+        NODE.start()
+        NODE.last_fc_check = None
+    return {"ok": True, "node": NODE.name,
+            "model_generation": NODE.inference.version.generation}
 
 
 @app.get("/model")
@@ -208,4 +351,8 @@ def health() -> Dict:
         "model_generation": NODE.inference.version.generation if ready else None,
         "load_seconds": NODE.inference.load_seconds if ready else None,
         "retrain_in_flight": NODE.retrainer.busy if NODE.retrainer else False,
+        # Read back off the live object: proof the deployed trade-off arrived.
+        "sdft_alpha": NODE.inference.sdft_alpha if ready else None,
+        "forecaster": NODE.inference._forecaster_meta() if ready else None,
+        "last_fc_check": NODE.last_fc_check,
     }

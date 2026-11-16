@@ -60,6 +60,11 @@ class Registry:
 
     # ── Writes ──────────────────────────────────────────────────────────────
 
+    def clear(self) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM model_versions")
+            self._conn.execute("DELETE FROM node_state")
+
     def register(self, payload: Dict) -> int:
         """Record a retrain outcome reported by a node."""
         with self._lock:

@@ -153,3 +153,40 @@ def test_ttl_sweep_endpoint(client) -> None:
     _reserve(client, "pos", 2)
     SYSTEM_CONFIG["sync"]["reservation_ttl_s"] = 0.0
     assert client.post("/sweep").json()["expired"] >= 0
+
+
+def test_daily_dates_sales_by_their_reservation_and_carries_stock(tmp_path):
+    """Commits are logged by reservation id alone; the dashboard's per-product
+    series must still put each sale on its day, and a quiet day must show the
+    stock it closed on rather than a gap."""
+    from edge_system.inventory.events import EventLog
+    e = EventLog(tmp_path / "ev.db")
+    e.record("reserve", sku="A", qty=2, reservation_id="r1", granted=1,
+             sim_date="2013-01-01", true_available=10)
+    e.record("commit", sku="A", qty=2, reservation_id="r1")
+    e.record("reserve", sku="A", qty=1, reservation_id="r2", granted=0,
+             sim_date="2013-01-02", true_available=8)
+    e.record("reserve", sku="B", qty=1, reservation_id="r3", granted=1,
+             sim_date="2013-01-02", true_available=5)
+    out = e.daily_by_sku(days=5)
+    assert [r["sold"] for r in out["A"]] == [2, 0]
+    assert [r["refused"] for r in out["A"]] == [0, 1]
+    assert [r["stock"] for r in out["B"]] == [5, 5]
+    # ordered = everything asked for, granted or refused
+    assert [r["ordered"] for r in out["A"]] == [2, 1]
+
+
+def test_daily_can_be_read_for_one_channel(tmp_path):
+    from edge_system.inventory.events import EventLog
+    e = EventLog(tmp_path / "ev.db")
+    e.record("reserve", node="pos", sku="A", qty=3, reservation_id="p1", granted=1,
+             sim_date="2013-01-01", true_available=10)
+    e.record("commit", node="pos", sku="A", qty=3, reservation_id="p1")
+    e.record("reserve", node="web", sku="A", qty=2, reservation_id="w1", granted=0,
+             sim_date="2013-01-01", true_available=7)
+    pos = e.daily_by_sku(days=5, node="pos")["A"][0]
+    web = e.daily_by_sku(days=5, node="web")["A"][0]
+    both = e.daily_by_sku(days=5)["A"][0]
+    assert (pos["sold"], pos["ordered"], pos["refused"]) == (3, 3, 0)
+    assert (web["sold"], web["ordered"], web["refused"]) == (0, 2, 2)
+    assert (both["sold"], both["ordered"]) == (3, 5)

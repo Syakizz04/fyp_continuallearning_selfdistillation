@@ -27,7 +27,9 @@ one source of truth and no parallel settings object to keep in sync.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -72,6 +74,23 @@ SCENARIOS: Dict[str, Dict] = {
         "network": {"delay_ms": 50.0, "partition": [],
                     "schedule": [{"at_tick": 20, "partition": ["marketplace"]},
                                  {"at_tick": 45, "partition": []}]},
+    },
+    # The viva demo behind the operator dashboard: models on, a pace a person can
+    # watch (one simulated day per second, so the weekly forecast check and its
+    # drift warnings visibly happen), and a marketplace partition part way
+    # through so the sync-status page has something to show. The gateway and
+    # dashboard start with it. A demo, not an experiment: no result from it is
+    # reported anywhere.
+    # The operator drives it from the dashboard's Simulation page (see
+    # sim/service.py): clock, outages, demand shocks and resets are all manual.
+    "demo": {
+        "sim": {"n_skus": 10, "pricing": "node", "initial_cover_days": 10.0,
+                "max_ticks": 400, "sku_select": "top",
+                "sku_max_gap_days": 21, "sku_per_dept": 5},
+        "sync": {"policy": "escrow_quota"},
+        "models": {"rl_detector": "rolling", "fc_signal": "realised",
+                   "fc_check_every_ticks": 1, "retrain_process": "subprocess"},
+        "network": {"delay_ms": 50.0, "partition": [], "schedule": []},
     },
     # E2: models on, staleness graduated through the refill multiple. NOT the
     # default multiple - see the calibration note in the README.
@@ -131,8 +150,10 @@ class ServiceProcess:
     """One uvicorn child, with the environment it needs to know who it is."""
 
     def __init__(self, name: str, app: str, port: int,
-                 env: Optional[Dict[str, str]] = None) -> None:
+                 env: Optional[Dict[str, str]] = None,
+                 health_path: str = "/health") -> None:
         self.name = name
+        self.health_path = health_path
         self.app = app
         self.port = port
         self.env = env or {}
@@ -191,7 +212,7 @@ class ServiceProcess:
             if self.proc is not None and self.proc.poll() is not None:
                 return False          # died during startup; the log says why
             try:
-                if httpx.get(f"{self.url}/health", timeout=2.0).json().get("ok"):
+                if httpx.get(f"{self.url}{self.health_path}", timeout=2.0).json().get("ok"):
                     return True
             except Exception:  # noqa: BLE001
                 pass
@@ -219,10 +240,14 @@ class ServiceProcess:
                                           errors="replace").splitlines(True)[-n:])
 
 
-def build_services(*, with_models: bool, strategy: str) -> List[ServiceProcess]:
+def build_services(*, with_models: bool, strategy: str,
+                   gateway: bool = False, simulator: bool = False) -> List[ServiceProcess]:
     # Scenario settings reach the children through the environment, never through
     # the mutated dict - see `config.service_env`.
     shared = service_env()
+    # The simulator calls the gateway's /api/internal routes; this per-launch
+    # secret is how the gateway knows the call is the simulator's.
+    shared["FYP_INTERNAL_TOKEN"] = secrets.token_urlsafe(24)
     services = [
         ServiceProcess("control", "edge_system.control.service:app",
                        SYSTEM_CONFIG["control_port"], env=dict(shared)),
@@ -235,6 +260,17 @@ def build_services(*, with_models: bool, strategy: str) -> List[ServiceProcess]:
                 f"edge-{ch['name']}", "edge_system.edge.service:app", ch["port"],
                 env={**shared, "FYP_NODE": ch["name"], "FYP_STRATEGY": strategy},
             ))
+    if gateway:
+        # Last: it reads every other service. Off the experiment path - it only
+        # reads, and nothing it records flows back into a run.
+        services.append(ServiceProcess(
+            "gateway", "edge_system.gateway.service:app",
+            SYSTEM_CONFIG["gateway_port"], env=dict(shared), health_path="/api/health"))
+    if simulator:
+        # After the gateway: its first act is to open day one through it.
+        services.append(ServiceProcess(
+            "simulator", "edge_system.sim.service:app", SYSTEM_CONFIG["sim_port"],
+            env={**shared, "FYP_SIM_CONFIG": json.dumps(SYSTEM_CONFIG["sim"])}))
     return services
 
 
@@ -296,6 +332,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--run-id", help="results filename suffix (default: scenario)")
     p.add_argument("--keep-up", action="store_true",
                    help="leave services running after the sim (for the dashboard)")
+    p.add_argument("--gateway", action="store_true",
+                   help="also start the decision-support gateway + dashboard "
+                        "(on by default for --scenario demo; needs models)")
     p.add_argument("--startup-timeout", type=float, default=180.0,
                    help="per-service readiness timeout; nodes load torch, so be "
                         "generous on a cold start")
@@ -317,6 +356,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     with_models = sim.get("pricing", "node") == "node"
     run_id = args.run_id or args.scenario
 
+    interactive = args.scenario == "demo"
+    if interactive:
+        # The demo keeps its databases apart from the experiments', so a reset
+        # from the Simulation page can wipe them without touching a result.
+        demo_dir = Path(SYSTEM_CONFIG["paths"]["state_dir"]) / "demo"
+        paths = SYSTEM_CONFIG["paths"]
+        paths["state_dir"] = str(demo_dir)
+        for key in ("events_db", "registry_db", "decisions_db"):
+            paths[key] = str(demo_dir / Path(paths[key]).name)
+
     ensure_dirs()
     log_dir = Path(SYSTEM_CONFIG["paths"]["state_dir"]) / "logs" / run_id
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -326,7 +375,29 @@ def main(argv: Optional[List[str]] = None) -> int:
           f"delay={SYSTEM_CONFIG['network']['delay_ms']}ms backend={backend} "
           f"models={with_models}")
 
-    services = build_services(with_models=with_models, strategy=args.strategy)
+    use_gateway = (args.gateway or args.scenario == "demo")
+    if use_gateway and not with_models:
+        print("[run] --gateway needs pricing=node (models loaded); not starting it",
+              file=sys.stderr)
+        use_gateway = False
+    if use_gateway:
+        # Every run replays the same simulated dates, and recommendations are
+        # unique per (sku, channel, sim_date) - so a decisions DB left over from
+        # an earlier run silently swallows every new recommendation. Archive it
+        # (never delete: it holds signed decisions) and start clean.
+        ddb = Path(SYSTEM_CONFIG["paths"]["decisions_db"])
+        if ddb.exists():
+            archived = ddb.with_name(f"{ddb.stem}.{time.strftime('%Y%m%d-%H%M%S')}{ddb.suffix}")
+            # The -wal/-shm sidecars travel with it: a killed gateway leaves
+            # un-checkpointed writes in the WAL, and SQLite pairs them by name.
+            for side in ("-wal", "-shm"):
+                src = Path(f"{ddb}{side}")
+                if src.exists():
+                    src.rename(f"{archived}{side}")
+            ddb.rename(archived)
+            print(f"[run] archived previous decisions DB -> {archived.name}")
+    services = build_services(with_models=with_models, strategy=args.strategy,
+                              gateway=use_gateway, simulator=interactive)
     started: List[ServiceProcess] = []
     rc = 0
     try:
@@ -355,6 +426,21 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         health = verify_inventory_config()
         print(f"[run] verified: policy={health['policy']} backend={health['backend']}")
+
+        if interactive:
+            print(f"[run] Shelfsense is up: http://{SYSTEM_CONFIG['host']}:"
+                  f"{SYSTEM_CONFIG['gateway_port']}  (the clock starts paused; "
+                  f"drive it from the Simulation page). Ctrl-C to stop.", flush=True)
+            try:
+                while all(svc.proc is not None and svc.proc.poll() is None for svc in started):
+                    time.sleep(1.0)
+                dead = [svc for svc in started if svc.proc.poll() is not None]
+                print(f"[run] service exited: {', '.join(s.name for s in dead)}\n"
+                      f"{dead[0].tail()}", file=sys.stderr)
+                rc = 1
+            except KeyboardInterrupt:
+                rc = 130
+            return rc
 
         from .sim.driver import SimulationDriver   # torch-free, but heavy: pandas
         driver = SimulationDriver(run_id=run_id,

@@ -77,6 +77,13 @@ def summary() -> Dict:
     return _registry().summary()
 
 
+@app.post("/admin/reset")
+def admin_reset() -> Dict:
+    """Forget every model version - the interactive simulator's "reset run"."""
+    _registry().clear()
+    return {"ok": True}
+
+
 @app.get("/health")
 def health() -> Dict:
     return {"ok": STATE["registry"] is not None}

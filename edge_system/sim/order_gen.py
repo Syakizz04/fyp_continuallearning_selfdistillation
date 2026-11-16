@@ -53,6 +53,11 @@ import numpy as np
 import pandas as pd
 
 
+def dept_of(sku: str) -> str:
+    """"FOODS_3_080" -> "FOODS_3" (M5 item ids are dept_number)."""
+    return sku.rsplit("_", 1)[0]
+
+
 @dataclass(frozen=True)
 class Order:
     """One customer's attempt to buy, before the inventory service sees it."""
@@ -115,10 +120,58 @@ class OrderGenerator:
     def from_csv(cls, path: str | Path, **kwargs) -> "OrderGenerator":
         return cls(pd.read_csv(path), **kwargs)
 
-    def skus(self, limit: Optional[int] = None) -> List[str]:
-        """SKUs in a stable order, so `--n-skus 10` picks the same ten every run."""
-        out = sorted(self._mean_daily)
+    def skus(self, limit: Optional[int] = None, order: str = "stable", *,
+             max_gap_days: Optional[int] = None, per_dept: Optional[int] = None,
+             window: Optional[tuple] = None) -> List[str]:
+        """SKUs in a stable order, so `--n-skus 10` picks the same ten every run.
+
+        `order="top"` takes the best sellers instead (ties broken by name, so it
+        is just as repeatable). The demo uses it: the first ten by name are slow
+        lines selling ~9 units a day between them, too few for a daily profit
+        signal to mean anything. Experiments keep "stable" and neither filter.
+
+        `max_gap_days` drops SKUs that go longer than that without a single sale
+        inside `window` (first, last date). Some M5 lines sell well on average
+        but vanish from the shelf for months (FOODS_2_128: 128 days with no sale
+        in the demo's year), which shows as a dead row and a demand collapse.
+        `per_dept` caps how many come from one department (FOODS_1/2/3), so
+        each is represented rather than the busiest taking every slot.
+        """
+        if order == "top":
+            out = sorted(self._mean_daily, key=lambda s: (-self._mean_daily[s], s))
+        elif order == "stable":
+            out = sorted(self._mean_daily)
+        else:
+            raise ValueError(f"unknown sku order {order!r}")
+        if max_gap_days is not None:
+            gaps = self.longest_gap(window)
+            out = [s for s in out if gaps.get(s, 0) <= max_gap_days]
+        if per_dept is not None:
+            taken: Dict[str, int] = {}
+            kept = []
+            for s in out:
+                d = dept_of(s)
+                if taken.get(d, 0) < per_dept:
+                    taken[d] = taken.get(d, 0) + 1
+                    kept.append(s)
+            out = kept
         return out if limit is None else out[:limit]
+
+    def longest_gap(self, window: Optional[tuple] = None) -> Dict[str, int]:
+        """sku -> the longest run of consecutive days with zero demand."""
+        df = self.df
+        if window is not None:
+            lo, hi = pd.Timestamp(window[0]), pd.Timestamp(window[1])
+            df = df[(df["date"] >= lo) & (df["date"] <= hi)]
+        out: Dict[str, int] = {}
+        for sku, g in df.groupby("product_id"):
+            z = g["realized_demand"].to_numpy() == 0
+            best = run = 0
+            for v in z:
+                run = run + 1 if v else 0
+                best = max(best, run)
+            out[sku] = best
+        return out
 
     @property
     def dates(self) -> pd.Series:
