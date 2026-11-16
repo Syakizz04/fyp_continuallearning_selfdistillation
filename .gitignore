@@ -30,3 +30,6 @@ dataset_generator/synthetic_data/output/
 
 # TensorBoard output from Lightning fits (smoke runs, retrains)
 lightning_logs/
+
+# Archives of run outputs moved to and from the GPU box.
+*.tar.gz
