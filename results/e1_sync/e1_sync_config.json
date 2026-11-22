@@ -1,0 +1,18 @@
+{
+  "ticks": 60,
+  "n_skus": 25,
+  "cover_days": 7.0,
+  "policies": [
+    "strong_lock",
+    "escrow_quota",
+    "eventual"
+  ],
+  "delays_ms": [
+    0.0,
+    50.0,
+    200.0,
+    1000.0
+  ],
+  "seed": 42,
+  "backend": "RedisPoolStore"
+}

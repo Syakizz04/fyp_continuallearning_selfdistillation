@@ -13,6 +13,10 @@ The rule:
 | dir | what | produced by | models |
 |---|---|---|---|
 | `rebuild_2026-11/` | Calibration of the rebuilt base TFT and PPO, the 6-check frozen-walk comparison with the old laptop, and the rebuild report | `experiments/rebuild_base_v4.py`, `experiments/compare_rebuild.py` | rebuilt `base`, `base_v4` |
+| `e1_sync/` | E1 manipulation check: 3 sync policies x 4 one-way delays on Redis. Fill: strong_lock 82.7%, escrow_quota 71.7%, eventual 100% (2081 units oversold). Matches the August run exactly | `bash experiments/run_model_free.sh` (step `e1`) | none (static prices) |
+| `synthetic_audit/` | Honesty audit of the synthetic layer: conservation holds; elasticity is 71% prior and 29% data | step `audit` | none (data v3) |
+| `e4_memory/` | E4 static memory: a full replay buffer is 3105 MB vs the SDFT teacher's 4.4 MB (706x) | step `e4` | rebuilt `base_v4` (same architecture as the original, so same bytes) |
+| `forecast_signal/` | TFT h=0 vs 28-day rolling mean as the pricer's demand signal: MAE 1.539 vs 1.489 | `python -m experiments.forecast_signal_check` | rebuilt `base_v4` |
 | `critic_compare/` | Pricing drift signals (revenue, critic and markup baseline) under 6 fault types, 17 non-overlapping trials, plus false alarms over 2013-2015 | `python -m experiments.critic_compare` (v2) | rebuilt `base_v4` |
 
 The FYP1 drift-walk results predate this rule. They live in

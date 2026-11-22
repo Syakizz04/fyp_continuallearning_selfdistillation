@@ -1,0 +1,10 @@
+check,pass,detail
+"unmet == max(0, demand - on_hand)",True,"max |residual| = 7.10543e-15 over 184,412 rows"
+stockout_flag <=> unmet > 0,True,mismatches = 0
+unmet <= demand,True,violations = 0
+on_hand >= 0,True,min on_hand = 0
+inventory flow balances,True,open 5 + recv 786 - served 786 = 5 vs closing 5
+served == demand - unmet,True,max |residual| = 0
+expected_units(base_price) == M5 units,True,max |error| = 0 (the no-model baseline is anchored)
+generated orders reproduce M5 units (aggregate),True,"generated 2,926 vs expected 3,005 (-2.63%) over 25 SKUs x 120 days"
+channel weights sum to 1,True,sum = 1.000000 across 3 channels

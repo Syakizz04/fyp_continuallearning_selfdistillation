@@ -1,0 +1,11 @@
+component,mb,bytes,n_items,n_units,unit,per_unit_mb,projected_at_capacity_mb,detail,mb_cpu,mb_gpu,rss_mb_at_measure,n_loader_batches_base_window
+tft_model,4.3983,4611968,1,1152992,model,4.398315,4.4,"served forecaster, params only - the yardstick",,,657.4,230
+tft_model_training,4.3983,4611968,1,1152992,model,4.398315,4.4,same model mid-fit: params + gradients,,,657.4,230
+ppo_policy,0.5332,559152,1,139788,model,0.533249,0.53,"served pricer, params only",,,657.4,230
+fc_teacher,4.3983,4611968,1,1152992,model,4.398315,4.4,"SDFT: exactly one frozen TFT, flat in stream length",4.3983,0.0,657.4,230
+rl_teacher,0.5332,559152,1,139788,model,0.533249,0.53,"SDFT: exactly one frozen policy, flat in stream length",0.5332,0.0,657.4,230
+fc_ewc_cold,8.7966,9223936,946,2305984,model,2.0,8.8,"fisher + anchor, before a fit builds the device cache",8.7966,0.0,657.4,230
+fc_ewc_warm,8.7966,9223936,946,2305984,model,2.0,8.8,DURING a fit: cpu pair + device pair both live,8.7966,0.0,657.4,230
+rl_ewc,1.0665,1118304,24,279576,model,0.533249,1.07,fisher + anchor = 2x policy,1.0665,0.0,657.4,230
+fc_replay,12.4219,13025280,8,2048,batch,1.552734,3105.47,measured on 8 batches (2048 windows); one base window yields 230 batches; cap=2000 batches,12.4219,0.0,657.4,230
+rl_replay,0.0916,96000,1000,1000,transition,9.2e-05,1.83,measured on 1000 transitions at obs_dim=9; cap=20000,0.0916,0.0,657.4,230

@@ -1,0 +1,225 @@
+{
+  "written": "2026-11-22 13:16:54",
+  "git": {
+    "commit": "4d722cd370d420e3a011834423f7bc67ed7e1f26",
+    "branch": "rebuild-after-laptop-loss",
+    "dirty": false
+  },
+  "argv": [
+    "-c",
+    "results/e1_sync",
+    "data/processed_m5_v4",
+    "{\"experiment\":\"E1\",\"backend\":\"redis\"}"
+  ],
+  "versions": {
+    "python": "3.11.9",
+    "torch": "2.3.1",
+    "lightning": "2.6.1",
+    "pytorch-forecasting": "1.7.0",
+    "stable-baselines3": "2.8.0",
+    "numpy": "1.26.4",
+    "pandas": "2.1.4",
+    "scikit-learn": "1.4.2",
+    "gymnasium": "1.2.3",
+    "darts": "0.33.0",
+    "cuda": "None",
+    "cuda_available": "False"
+  },
+  "data": {
+    "dir": "data\\processed_m5_v4",
+    "sha256": {
+      "data/processed_m5_v4/demand_forecasting.csv": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca",
+      "data/processed_m5_v4/elasticity_report.csv": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978",
+      "data/processed_m5_v4/refresh_report.json": "7159c37d7dad83edff047a4e9595d402ac680870fddecb722420a525e906e1f1",
+      "data/processed_m5_v4/rl_environment.csv": "5ea3c5500229996395551abcb375aad0d7310f293c1d1edea6b78704c2133051"
+    },
+    "matches_artifacts_json": true
+  },
+  "checkpoint": {
+    "dir": null,
+    "sha256": {},
+    "matches_artifacts_json": null
+  },
+  "config": {
+    "paths": {
+      "demand_csv": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\data\\processed_m5\\demand_forecasting.csv",
+      "rl_csv": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\data\\processed_m5\\rl_environment.csv",
+      "checkpoints": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\outputs\\drift\\checkpoints",
+      "results": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\outputs\\drift\\results",
+      "logs": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\outputs\\drift\\logs",
+      "plots": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\outputs\\drift\\plots"
+    },
+    "timeline": {
+      "base_start": "2011-01-29",
+      "base_end": "2012-12-31",
+      "calibration_tail_weeks": 8,
+      "walk_start": "2013-01-01",
+      "walk_end": "2015-12-31",
+      "check_every_days": 7,
+      "eval_window_weeks": 4
+    },
+    "strategies": [
+      "replay",
+      "sdft"
+    ],
+    "baselines": [
+      "frozen",
+      "naive"
+    ],
+    "seed": 42,
+    "retrain": {
+      "scope": "recent_window+replay",
+      "recent_window_weeks": 8,
+      "warm_start": true,
+      "periodic_every_weeks": 13,
+      "retrain_epochs": 5,
+      "retrain_timesteps": 15000
+    },
+    "drift": {
+      "fc_k_sigma": 2.0,
+      "fc_consecutive": 2,
+      "rl_k_sigma": 1.5,
+      "rl_profit_floor": 1.0,
+      "rl_consecutive": 2,
+      "k_sensitivity": [
+        1.5,
+        2.0,
+        2.5
+      ],
+      "rl_k_sensitivity": [
+        0.0,
+        0.5,
+        1.0,
+        1.5,
+        2.0,
+        2.5
+      ]
+    },
+    "probes": {
+      "cadence": "quarterly",
+      "window_days": 14
+    },
+    "forecasting": {
+      "encoder_length": 60,
+      "prediction_length": 14,
+      "hidden_size": 128,
+      "attention_head_size": 4,
+      "dropout": 0.1,
+      "hidden_continuous_size": 32,
+      "output_size": 7,
+      "learning_rate": 0.0003,
+      "batch_size": 256,
+      "max_epochs": 12,
+      "early_stop_patience": 3,
+      "early_stop_min_delta": 0.001,
+      "allow_unknown_categories": true,
+      "gradient_clip": 0.1,
+      "num_workers": 4,
+      "group_ids": [
+        "product_id",
+        "region_id"
+      ],
+      "target": "demand",
+      "known_reals": [
+        "time_idx",
+        "day_of_week",
+        "day_of_month",
+        "week_of_year",
+        "month",
+        "quarter",
+        "is_weekend",
+        "sell_price",
+        "snap",
+        "is_event",
+        "event_type_code"
+      ],
+      "static_categoricals": [
+        "product_id",
+        "region_id",
+        "product_category"
+      ],
+      "static_reals": [],
+      "time_varying_unknown_reals": [
+        "demand"
+      ]
+    },
+    "rl": {
+      "learning_rate": 0.0003,
+      "n_steps": 2048,
+      "batch_size": 64,
+      "n_epochs": 10,
+      "gamma": 0.99,
+      "gae_lambda": 0.95,
+      "clip_range": 0.2,
+      "ent_coef": 0.01,
+      "vf_coef": 0.5,
+      "max_grad_norm": 0.5,
+      "total_timesteps_per_task": 50000,
+      "inventory_constrained": true,
+      "lost_sale_penalty": 0.5,
+      "eval_episodes": 6,
+      "price_tiers": [
+        -0.1,
+        -0.08,
+        -0.06,
+        -0.04,
+        -0.02,
+        0.0,
+        0.02,
+        0.04,
+        0.06,
+        0.08,
+        0.1
+      ],
+      "n_actions": 11,
+      "policy": "MlpPolicy",
+      "net_arch": [
+        256,
+        256
+      ]
+    },
+    "cl": {
+      "ewc_lambda": 400.0,
+      "ewc_fisher_samples": 200,
+      "replay_buffer_size": 2000,
+      "replay_mix_ratio": 0.3,
+      "recall_buffer_capacity": 20000,
+      "recall_mix_n_steps": 512,
+      "sdft_alpha": 0.5,
+      "sdft_kl_coef": 0.1
+    },
+    "hardware": {
+      "device": "cpu",
+      "precision": "32",
+      "compile": false,
+      "compile_mode": "reduce-overhead",
+      "num_workers": 0,
+      "pin_memory": false,
+      "persistent_workers": false
+    },
+    "metrics": {
+      "forecasting_primary": "mase",
+      "forecasting_secondary": [
+        "smape",
+        "rmse"
+      ],
+      "rl_primary": [
+        "profit_index",
+        "cumulative_profit"
+      ],
+      "rl_secondary": [
+        "pricing_regret",
+        "avg_episode_reward"
+      ],
+      "efficiency": [
+        "n_retrains",
+        "cumulative_train_steps"
+      ],
+      "retention": [
+        "forgetting"
+      ]
+    }
+  },
+  "experiment": "E1",
+  "backend": "redis"
+}
