@@ -76,6 +76,14 @@ export interface Forecast {
 }
 
 export type Bound = 'min_price' | 'max_price' | 'min_margin'
+/** One row of the inventory service's event log (GET /inventory/events). */
+export interface InventoryEvent {
+  id: number; ts: number; kind: string
+  node: string | null; sku: string | null; qty: number | null
+  granted?: number | null; node_view?: number | null; true_available?: number | null
+  [extra: string]: unknown
+}
+
 export type RecStatus = 'pending' | 'approved' | 'rejected' | 'superseded'
 
 export interface Recommendation {
@@ -177,7 +185,7 @@ export interface Inventory {
   policy: string
   backend: string
   effective: Record<string, unknown>
-  metrics: Record<string, any>
+  metrics: Record<string, number | null>
   channels: ChannelSync[]
   skus: StockRow[]
 }
@@ -200,7 +208,7 @@ export interface NodeHealth {
     forecaster: { forecaster_generation: number; forecaster_updated_at: number | null; forecaster_updated_sim_date: string | null } | null
     last_fc_check: { tick: number; sim_date: string; mase: number | null; seconds: number; ts: number } | null
   }
-  model?: { version: { generation: number; source: string; retrained_at: number | null; trigger_reason: string | null }; history: any[] }
+  model?: { version: { generation: number; source: string; retrained_at: number | null; trigger_reason: string | null }; history: unknown[] }
   drift?: {
     status: { checks: number; fc_threshold: number | null; fc_signal?: 'dataset' | 'realised'; fc_warmup_left?: number; fc_calibration?: { mu: number; sigma: number; k: number; warmup_days: number; consecutive: number } | null; rl_threshold: number | null; fc_streak: number; rl_streak: number; rl_detector?: 'fixed' | 'rolling'; rl_warmup_left?: number; rl_calibration?: { mu: number; sigma: number; k: number; window_days: number; warmup_days: number } | null; rl_provisional?: Provisional | null; fc_provisional?: Provisional | null; last_mase: number | null; last_profit_index: number | null; n_events: number }
     events: DriftEvent[]
@@ -295,7 +303,7 @@ export const api = {
   decisions: (user?: string) => call<Decision[]>('GET', `/decisions${qs({ user })}`),
 
   inventory: () => call<Inventory>('GET', '/inventory'),
-  inventoryEvents: (limit = 60) => call<Record<string, any>[]>('GET', `/inventory/events${qs({ limit })}`),
+  inventoryEvents: (limit = 60) => call<InventoryEvent[]>('GET', `/inventory/events${qs({ limit })}`),
   models: (stream = 120) => call<Models>('GET', `/models${qs({ stream })}`),
   history: (limit = 300) => call<HistoryItem[]>('GET', `/history${qs({ limit })}`),
 

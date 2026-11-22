@@ -25,8 +25,8 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s
           --health-timeout 3s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -38,6 +38,10 @@ jobs:
           grep -viE '^(torch|triton|nvidia-[a-z0-9-]+)==' requirements-lock-linux.txt > /tmp/lock-cpu.txt
           pip install -r /tmp/lock-cpu.txt
           pip install pytest
+      - name: Check every test module imports
+        # A missing dependency fails collection as exit code 2 with no test run;
+        # this step names the module instead.
+        run: python -m pytest edge_system drift_pipeline --collect-only -q -p no:cacheprovider
       - name: Test
         env:
           PYTHONIOENCODING: utf-8
@@ -50,15 +54,12 @@ jobs:
       run:
         working-directory: webapp
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: webapp/package-lock.json
       - run: npm ci
-      # Non-blocking until the 6 existing no-explicit-any errors (api.ts,
-      # charts/Charts.tsx) are typed; the build below is what gates.
       - run: npm run lint
-        continue-on-error: true
       - run: npm run build       # tsc -b type-checks before vite builds

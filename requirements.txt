@@ -2,8 +2,11 @@
 # requirements-lock-win.txt (this Windows dev box) and requirements-lock-linux.txt
 # (the Vast.ai GPU box), regenerated with:
 #   pip freeze > requirements-lock-win.txt            (from the working .venv)
-#   uv pip compile requirements.txt --python-version 3.11
+#   uv pip compile requirements.txt requirements-system.txt
+#      -c requirements-lock-win.txt --python-version 3.11
 #      --python-platform x86_64-unknown-linux-gnu -o requirements-lock-linux.txt
+# Both locks cover requirements-system.txt (FastAPI, Redis client, ...) too,
+# and -c pins Linux to the exact versions of the working Windows venv.
 # avalanche-lib was removed 2026-11-22: never imported, and its proxsuite
 # dependency has no Windows wheel.
 numpy<2.0

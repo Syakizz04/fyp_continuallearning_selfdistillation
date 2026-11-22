@@ -20,7 +20,12 @@ const HISTORY = '#6B7177'          // theme.py "frozen" grey: observed, not mode
 
 const axis = { stroke: '#D8D6CE', tickLine: false, tick: { fill: INK2 } }
 
+// Chart rows mix the x label, numbers and [lo, hi] band arrays per series key,
+// and recharts reads them by dynamic dataKey, so no narrower type fits.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
+/** What recharts hands a Scatter `shape`: the point's pixel position (absent for a null value). */
+type DotProps = { cx?: number; cy?: number | null }
 
 function TipShell({ head, rows }: { head: string; rows: { key: React.ReactNode; name: string; value: string }[] }) {
   return (
@@ -150,7 +155,7 @@ export function CheckChart({ series, threshold, metric, events, height = 260, la
           ))}
           {nodes.map(n => (
             <Scatter key={`ev_${n}`} dataKey={`ev_${n}`} fill={ALERT} isAnimationActive={false}
-              shape={(p: any) => p.cy == null ? <g /> : <circle cx={p.cx} cy={p.cy} r={5} fill={ALERT} stroke="#fff" strokeWidth={2} />} />
+              shape={(p: DotProps) => p.cy == null ? <g /> : <circle cx={p.cx} cy={p.cy} r={5} fill={ALERT} stroke="#fff" strokeWidth={2} />} />
           ))}
           <Tooltip cursor={{ stroke: '#1A1A1A', strokeWidth: 1 }} isAnimationActive={false}
             content={({ active, payload, label: x }) => {
@@ -282,7 +287,7 @@ export function CheckPanels({ series, metric, events, height = 150, label, fmt =
                     <Line dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls
                       activeDot={{ r: 4, stroke: '#fff', strokeWidth: 2 }} />
                     <Scatter dataKey="ev" fill={ALERT} isAnimationActive={false}
-                      shape={(p: any) => p.cy == null ? <g /> : <circle cx={p.cx} cy={p.cy} r={4.5} fill={ALERT} stroke="#fff" strokeWidth={2} />} />
+                      shape={(p: DotProps) => p.cy == null ? <g /> : <circle cx={p.cx} cy={p.cy} r={4.5} fill={ALERT} stroke="#fff" strokeWidth={2} />} />
                     <Tooltip cursor={{ stroke: '#1A1A1A', strokeWidth: 1 }} isAnimationActive={false}
                       content={({ active, payload, label: x }) => {
                         if (!active || !payload?.length) return null
