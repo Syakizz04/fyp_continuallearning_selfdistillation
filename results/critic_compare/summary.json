@@ -1,0 +1,889 @@
+{
+  "version": 2,
+  "checkpoints": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\outputs\\drift\\checkpoints\\base_v4",
+  "critic_line": [
+    -0.0032176044448438963,
+    0.01368231553935724
+  ],
+  "markup_coefficient": 0.43271621481379247,
+  "skus": [
+    "FOODS_3_080",
+    "FOODS_3_555",
+    "FOODS_3_723",
+    "FOODS_3_668",
+    "FOODS_3_219",
+    "FOODS_2_152",
+    "FOODS_2_388",
+    "FOODS_1_054",
+    "FOODS_2_342",
+    "FOODS_2_309"
+  ],
+  "window": [
+    "2013-01-01",
+    "2015-12-31"
+  ],
+  "onsets": [
+    "2013-02-05",
+    "2013-04-09",
+    "2013-06-11",
+    "2013-08-13",
+    "2013-10-15",
+    "2013-12-17",
+    "2014-02-18",
+    "2014-04-22",
+    "2014-06-24",
+    "2014-08-26",
+    "2014-10-28",
+    "2014-12-30",
+    "2015-03-03",
+    "2015-05-05",
+    "2015-07-07",
+    "2015-09-08",
+    "2015-11-10"
+  ],
+  "warmup_lead_days": 35,
+  "horizon_days": 28,
+  "detector": {
+    "rl_window_days": 7,
+    "rl_warmup_days": 28,
+    "rl_k_sigma": 2.5,
+    "relearn_min_days": 7
+  },
+  "caught": {
+    "none/marketplace/critic": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "none/marketplace/markup": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 20.0,
+      "fires_before_onset": 0
+    },
+    "none/marketplace/revenue": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 13.5,
+      "fires_before_onset": 0
+    },
+    "none/pos/critic": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 15.0,
+      "fires_before_onset": 0
+    },
+    "none/pos/markup": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 19.5,
+      "fires_before_onset": 0
+    },
+    "none/pos/revenue": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 8.0,
+      "fires_before_onset": 0
+    },
+    "none/web/critic": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 12.5,
+      "fires_before_onset": 0
+    },
+    "none/web/markup": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 20.0,
+      "fires_before_onset": 0
+    },
+    "none/web/revenue": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 12.0,
+      "fires_before_onset": 0
+    },
+    "sensitive2/marketplace/critic": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "sensitive2/marketplace/markup": {
+      "k": 3,
+      "n": 17,
+      "ci95": [
+        0.062,
+        0.41
+      ],
+      "median_delay_days": 24.0,
+      "fires_before_onset": 0
+    },
+    "sensitive2/marketplace/revenue": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "sensitive2/pos/critic": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "sensitive2/pos/markup": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 19.5,
+      "fires_before_onset": 0
+    },
+    "sensitive2/pos/revenue": {
+      "k": 3,
+      "n": 17,
+      "ci95": [
+        0.062,
+        0.41
+      ],
+      "median_delay_days": 15.0,
+      "fires_before_onset": 0
+    },
+    "sensitive2/web/critic": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 10.0,
+      "fires_before_onset": 0
+    },
+    "sensitive2/web/markup": {
+      "k": 3,
+      "n": 17,
+      "ci95": [
+        0.062,
+        0.41
+      ],
+      "median_delay_days": 21.0,
+      "fires_before_onset": 0
+    },
+    "sensitive2/web/revenue": {
+      "k": 4,
+      "n": 17,
+      "ci95": [
+        0.096,
+        0.473
+      ],
+      "median_delay_days": 16.5,
+      "fires_before_onset": 0
+    },
+    "sensitive6/marketplace/critic": {
+      "k": 4,
+      "n": 17,
+      "ci95": [
+        0.096,
+        0.473
+      ],
+      "median_delay_days": 13.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/marketplace/markup": {
+      "k": 9,
+      "n": 17,
+      "ci95": [
+        0.31,
+        0.738
+      ],
+      "median_delay_days": 10.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/marketplace/revenue": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 13.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/pos/critic": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 23.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/pos/markup": {
+      "k": 6,
+      "n": 17,
+      "ci95": [
+        0.173,
+        0.587
+      ],
+      "median_delay_days": 9.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/pos/revenue": {
+      "k": 7,
+      "n": 17,
+      "ci95": [
+        0.216,
+        0.64
+      ],
+      "median_delay_days": 23.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/web/critic": {
+      "k": 3,
+      "n": 17,
+      "ci95": [
+        0.062,
+        0.41
+      ],
+      "median_delay_days": 13.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/web/markup": {
+      "k": 10,
+      "n": 17,
+      "ci95": [
+        0.36,
+        0.784
+      ],
+      "median_delay_days": 7.0,
+      "fires_before_onset": 0
+    },
+    "sensitive6/web/revenue": {
+      "k": 7,
+      "n": 17,
+      "ci95": [
+        0.216,
+        0.64
+      ],
+      "median_delay_days": 15.0,
+      "fires_before_onset": 0
+    },
+    "stuck+10/marketplace/critic": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck+10/marketplace/markup": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck+10/marketplace/revenue": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 5.5,
+      "fires_before_onset": 0
+    },
+    "stuck+10/pos/critic": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck+10/pos/markup": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck+10/pos/revenue": {
+      "k": 3,
+      "n": 17,
+      "ci95": [
+        0.062,
+        0.41
+      ],
+      "median_delay_days": 9.0,
+      "fires_before_onset": 0
+    },
+    "stuck+10/web/critic": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck+10/web/markup": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck+10/web/revenue": {
+      "k": 6,
+      "n": 17,
+      "ci95": [
+        0.173,
+        0.587
+      ],
+      "median_delay_days": 16.5,
+      "fires_before_onset": 0
+    },
+    "stuck-10/marketplace/critic": {
+      "k": 3,
+      "n": 17,
+      "ci95": [
+        0.062,
+        0.41
+      ],
+      "median_delay_days": 10.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/marketplace/markup": {
+      "k": 9,
+      "n": 17,
+      "ci95": [
+        0.31,
+        0.738
+      ],
+      "median_delay_days": 5.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/marketplace/revenue": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 1.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/pos/critic": {
+      "k": 14,
+      "n": 17,
+      "ci95": [
+        0.59,
+        0.938
+      ],
+      "median_delay_days": 9.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/pos/markup": {
+      "k": 12,
+      "n": 17,
+      "ci95": [
+        0.469,
+        0.867
+      ],
+      "median_delay_days": 6.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/pos/revenue": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 10.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/web/critic": {
+      "k": 9,
+      "n": 17,
+      "ci95": [
+        0.31,
+        0.738
+      ],
+      "median_delay_days": 7.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/web/markup": {
+      "k": 11,
+      "n": 17,
+      "ci95": [
+        0.413,
+        0.827
+      ],
+      "median_delay_days": 5.0,
+      "fires_before_onset": 0
+    },
+    "stuck-10/web/revenue": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck0/marketplace/critic": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 22.0,
+      "fires_before_onset": 0
+    },
+    "stuck0/marketplace/markup": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck0/marketplace/revenue": {
+      "k": 3,
+      "n": 17,
+      "ci95": [
+        0.062,
+        0.41
+      ],
+      "median_delay_days": 22.0,
+      "fires_before_onset": 0
+    },
+    "stuck0/pos/critic": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 23.0,
+      "fires_before_onset": 0
+    },
+    "stuck0/pos/markup": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck0/pos/revenue": {
+      "k": 2,
+      "n": 17,
+      "ci95": [
+        0.033,
+        0.343
+      ],
+      "median_delay_days": 9.5,
+      "fires_before_onset": 0
+    },
+    "stuck0/web/critic": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 10.0,
+      "fires_before_onset": 0
+    },
+    "stuck0/web/markup": {
+      "k": 0,
+      "n": 17,
+      "ci95": [
+        0.0,
+        0.184
+      ],
+      "median_delay_days": null,
+      "fires_before_onset": 0
+    },
+    "stuck0/web/revenue": {
+      "k": 1,
+      "n": 17,
+      "ci95": [
+        0.01,
+        0.27
+      ],
+      "median_delay_days": 10.0,
+      "fires_before_onset": 0
+    }
+  },
+  "mcnemar_critic_vs": {
+    "none/marketplace": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 2,
+        "p": 0.5
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 2,
+        "p": 0.5
+      }
+    },
+    "none/pos": {
+      "revenue": {
+        "a_only": 1,
+        "b_only": 1,
+        "p": 1.0
+      },
+      "markup": {
+        "a_only": 1,
+        "b_only": 2,
+        "p": 1.0
+      }
+    },
+    "none/web": {
+      "revenue": {
+        "a_only": 1,
+        "b_only": 1,
+        "p": 1.0
+      },
+      "markup": {
+        "a_only": 2,
+        "b_only": 2,
+        "p": 1.0
+      }
+    },
+    "sensitive2/marketplace": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 0,
+        "p": 1.0
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 3,
+        "p": 0.25
+      }
+    },
+    "sensitive2/pos": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 3,
+        "p": 0.25
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 2,
+        "p": 0.5
+      }
+    },
+    "sensitive2/web": {
+      "revenue": {
+        "a_only": 1,
+        "b_only": 4,
+        "p": 0.375
+      },
+      "markup": {
+        "a_only": 1,
+        "b_only": 3,
+        "p": 0.625
+      }
+    },
+    "sensitive6/marketplace": {
+      "revenue": {
+        "a_only": 3,
+        "b_only": 0,
+        "p": 0.25
+      },
+      "markup": {
+        "a_only": 1,
+        "b_only": 6,
+        "p": 0.125
+      }
+    },
+    "sensitive6/pos": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 6,
+        "p": 0.0312
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 5,
+        "p": 0.0625
+      }
+    },
+    "sensitive6/web": {
+      "revenue": {
+        "a_only": 1,
+        "b_only": 5,
+        "p": 0.2188
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 7,
+        "p": 0.0156
+      }
+    },
+    "stuck+10/marketplace": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 2,
+        "p": 0.5
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 0,
+        "p": 1.0
+      }
+    },
+    "stuck+10/pos": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 3,
+        "p": 0.25
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 0,
+        "p": 1.0
+      }
+    },
+    "stuck+10/web": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 6,
+        "p": 0.0312
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 0,
+        "p": 1.0
+      }
+    },
+    "stuck-10/marketplace": {
+      "revenue": {
+        "a_only": 3,
+        "b_only": 1,
+        "p": 0.625
+      },
+      "markup": {
+        "a_only": 0,
+        "b_only": 6,
+        "p": 0.0312
+      }
+    },
+    "stuck-10/pos": {
+      "revenue": {
+        "a_only": 13,
+        "b_only": 0,
+        "p": 0.0002
+      },
+      "markup": {
+        "a_only": 4,
+        "b_only": 2,
+        "p": 0.6875
+      }
+    },
+    "stuck-10/web": {
+      "revenue": {
+        "a_only": 9,
+        "b_only": 0,
+        "p": 0.0039
+      },
+      "markup": {
+        "a_only": 1,
+        "b_only": 3,
+        "p": 0.625
+      }
+    },
+    "stuck0/marketplace": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 2,
+        "p": 0.5
+      },
+      "markup": {
+        "a_only": 1,
+        "b_only": 0,
+        "p": 1.0
+      }
+    },
+    "stuck0/pos": {
+      "revenue": {
+        "a_only": 1,
+        "b_only": 2,
+        "p": 1.0
+      },
+      "markup": {
+        "a_only": 1,
+        "b_only": 0,
+        "p": 1.0
+      }
+    },
+    "stuck0/web": {
+      "revenue": {
+        "a_only": 0,
+        "b_only": 0,
+        "p": 1.0
+      },
+      "markup": {
+        "a_only": 1,
+        "b_only": 0,
+        "p": 1.0
+      }
+    }
+  },
+  "false_alarms": {
+    "years": 3.0,
+    "by_channel_signal": {
+      "pos/revenue": {
+        "events": 5,
+        "per_year": 1.67,
+        "ci95": [
+          0.54,
+          3.89
+        ]
+      },
+      "pos/critic": {
+        "events": 2,
+        "per_year": 0.67,
+        "ci95": [
+          0.08,
+          2.41
+        ]
+      },
+      "pos/markup": {
+        "events": 0,
+        "per_year": 0.0,
+        "ci95": [
+          0.0,
+          1.23
+        ]
+      },
+      "web/revenue": {
+        "events": 2,
+        "per_year": 0.67,
+        "ci95": [
+          0.08,
+          2.41
+        ]
+      },
+      "web/critic": {
+        "events": 2,
+        "per_year": 0.67,
+        "ci95": [
+          0.08,
+          2.41
+        ]
+      },
+      "web/markup": {
+        "events": 0,
+        "per_year": 0.0,
+        "ci95": [
+          0.0,
+          1.23
+        ]
+      },
+      "marketplace/revenue": {
+        "events": 0,
+        "per_year": 0.0,
+        "ci95": [
+          0.0,
+          1.23
+        ]
+      },
+      "marketplace/critic": {
+        "events": 0,
+        "per_year": 0.0,
+        "ci95": [
+          0.0,
+          1.23
+        ]
+      },
+      "marketplace/markup": {
+        "events": 0,
+        "per_year": 0.0,
+        "ci95": [
+          0.0,
+          1.23
+        ]
+      }
+    }
+  }
+}

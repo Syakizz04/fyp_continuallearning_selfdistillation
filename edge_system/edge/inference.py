@@ -284,19 +284,34 @@ class LocalInference:
     # slot instead of the forecast. Asked with the forecast it explained 18-46%
     # of the reward and, like the revenue index it replaces, mostly tracked
     # demand swings; with hindsight demand, day-to-day demand noise sits on both
-    # sides and cancels, leaving how well the price did. Replayed on 2013-2014
-    # through this node's detector (scratch: critic_compare.py): it caught a
-    # pricer stuck at -10% 13/15 times and a world 2x more price-sensitive than
-    # trained 12/15, where the revenue index caught 4/15 and 1/15, at a similar
-    # 2-3.5 retrains a year on normal trading. No true demand curve is used:
-    # only the node's own critic, its quotes, and the orders it saw.
+    # sides and cancels, leaving how well the price did. No true demand curve
+    # is used: only the node's own critic, its quotes, and the orders it saw.
     #
-    # The pricer was trained on a contextual bandit (its price never changes
-    # the next state), so V(s) = expected reward today + a near-constant
-    # future term. The line r = a + b V, fitted on the training window from
-    # training data alone, turns V into an expected day's reward; the monitor's
-    # warm-up absorbs whatever offset the live world adds (the sim applies raw
-    # elasticity, the env a normalised one).
+    # What it actually measures (experiments/critic_compare.py, 2026-11-22).
+    # Price is not among V(s)'s inputs (DynamicPricingEnv._get_obs), so V
+    # cannot tell which tier was charged. Price reaches it only through the
+    # hindsight units, which also scale the actual reward, so the units cancel.
+    # What is left is a per-unit-margin gauge: it falls when prices sit below
+    # what this policy usually charges. Measured on the rebuilt base_v4, over
+    # 17 non-overlapping trials:
+    #   * It catches a pricer stuck at -10% (pos 14/17 vs revenue 1/17).
+    #   * It does not catch one stuck at base or at +10%. The floor is
+    #     one-sided, and +10% raises margin.
+    #   * It does not catch a 2x price-sensitive world (an elasticity shift
+    #     looks like ordinary demand).
+    #   * A one-number markup index, reward over M x base x sold, matches it,
+    #     and beats it on the marketplace.
+    # So treat it as a markup alarm, not a judge of pricing quality. The earlier
+    # "13/15 and 12/15" claims came from a lost scratch script on the old
+    # pricer, and they do not reproduce.
+    #
+    # The action never changes the next state (step reads the next dataset
+    # row). But PPO trains with gamma 0.99 over SKU-ordered rows, so V(s) is
+    # mostly a discounted return over the same SKU's coming days, not today's
+    # reward. That is why the fitted slope b is tiny (~0.014). The line
+    # r = a + b V is fitted on the training window. The monitor's warm-up
+    # absorbs whatever offset the live world adds: the sim applies raw
+    # elasticity, while the env applies a normalised one.
 
     #: Quotes kept for the after-the-day question, in days.
     QUOTE_DAYS = 3
