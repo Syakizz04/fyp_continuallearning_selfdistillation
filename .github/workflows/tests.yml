@@ -1,0 +1,64 @@
+# CPU-only CI: catch a broken commit before it costs GPU hours.
+#
+# Data and checkpoints are gitignored, so the tests that need them
+# (test_retrain_determinism, test_walk_state, test_profiles) skip here, as do
+# the opt-in browser tests. Run those locally before an E2 run:
+#   pytest edge_system drift_pipeline   (with data + checkpoints on disk)
+#   FYP_E2E=1 pytest edge_system/gateway/test_browser.py
+# Redis runs as a service so the sync-policy tests (inventory/test_policies.py)
+# run against real Redis, the backend E1's numbers depend on.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-lock-linux.txt
+      - name: Install (CPU torch + the Linux lock, minus CUDA wheels)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
+          grep -viE '^(torch|triton|nvidia-[a-z0-9-]+)==' requirements-lock-linux.txt > /tmp/lock-cpu.txt
+          pip install -r /tmp/lock-cpu.txt
+          pip install pytest
+      - name: Test
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -m pytest edge_system drift_pipeline -q -p no:cacheprovider -rs
+
+  webapp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+      - run: npm ci
+      # Non-blocking until the 6 existing no-explicit-any errors (api.ts,
+      # charts/Charts.tsx) are typed; the build below is what gates.
+      - run: npm run lint
+        continue-on-error: true
+      - run: npm run build       # tsc -b type-checks before vite builds

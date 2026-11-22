@@ -80,6 +80,7 @@ from experiments.exp_staleness_cl import (DEFAULT_BASE_CKPT,  # noqa: E402
                                           DEFAULT_DATA_DIR, base_paths,
                                           build_tables, copy_static_arm,
                                           free_gpu, results_dir, spec_for)
+from experiments.provenance import write_run_meta  # noqa: E402
 
 console = Console()
 
@@ -246,6 +247,10 @@ def main(argv=None) -> int:
         for alpha in args.alphas:
             cell_dir = root / censoring / alpha_tag(alpha)
             cell_dir.mkdir(parents=True, exist_ok=True)
+            write_run_meta(cell_dir, data_dir=args.data_dir, ckpt_dir=args.base_ckpt,
+                           extra={"experiment": "E5", "censoring": censoring,
+                                  "sdft_alpha": alpha, "seed": args.seed,
+                                  "fill_rate": cdata["censoring"].get("fill_rate")})
             if (cell_dir / f"probe_scores_{ARM}.json").exists() and not args.force:
                 console.print(f"  [dim]skip alpha={alpha} (already done)[/dim]")
             else:
