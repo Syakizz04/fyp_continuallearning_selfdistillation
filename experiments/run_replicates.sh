@@ -30,7 +30,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 CENSORING=${CENSORING:-escrow_quota}
-SEEDS=${SEEDS:-"42 123 7"}
+SEEDS=${SEEDS:-"42 123 7 2024 99"}   # 5: see experiments/PREREGISTRATION_E2.md
 ARMS=${ARMS:-"frozen naive replay sdft"}
 CONCURRENCY=${CONCURRENCY:-6}
 LOGDIR=${LOGDIR:-outputs/drift/logs/rep}

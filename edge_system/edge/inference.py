@@ -101,6 +101,9 @@ class LocalInference:
         self._critic_fit_for: Optional[int] = None
         self._critic_line: Optional[tuple] = None
         self._critic_lock = threading.Lock()
+        # The markup signal's one fitted number, per pricer object (`markup_outcome`).
+        self._markup_fit_for: Optional[int] = None
+        self._markup_coef: Optional[float] = None
 
     # ── Startup ─────────────────────────────────────────────────────────────
 
@@ -125,6 +128,12 @@ class LocalInference:
         # constant columns). It must run BEFORE load_base, which rebuilds the TFT
         # architecture against that config.
         self._data = prepare_drift_data(demand_path, rl_path)
+        # The node and its retrains read only the *_full and *_base frames (and
+        # tft_full_censored, set later). The calibration and walk slices belong
+        # to the offline experiments; dropping them saves ~33 MB per node and
+        # changes no output.
+        for unused in ("tft_calib", "rl_calib", "tft_walk", "rl_walk"):
+            self._data.pop(unused, None)
 
         # `load_base()` defaults to `<drift checkpoints>/base`, which silently
         # ignores `paths.base_ckpt_dir` - so pointing a node at an alternative
@@ -284,19 +293,34 @@ class LocalInference:
     # slot instead of the forecast. Asked with the forecast it explained 18-46%
     # of the reward and, like the revenue index it replaces, mostly tracked
     # demand swings; with hindsight demand, day-to-day demand noise sits on both
-    # sides and cancels, leaving how well the price did. Replayed on 2013-2014
-    # through this node's detector (scratch: critic_compare.py): it caught a
-    # pricer stuck at -10% 13/15 times and a world 2x more price-sensitive than
-    # trained 12/15, where the revenue index caught 4/15 and 1/15, at a similar
-    # 2-3.5 retrains a year on normal trading. No true demand curve is used:
-    # only the node's own critic, its quotes, and the orders it saw.
+    # sides and cancels, leaving how well the price did. No true demand curve
+    # is used: only the node's own critic, its quotes, and the orders it saw.
     #
-    # The pricer was trained on a contextual bandit (its price never changes
-    # the next state), so V(s) = expected reward today + a near-constant
-    # future term. The line r = a + b V, fitted on the training window from
-    # training data alone, turns V into an expected day's reward; the monitor's
-    # warm-up absorbs whatever offset the live world adds (the sim applies raw
-    # elasticity, the env a normalised one).
+    # What it actually measures (experiments/critic_compare.py, 2026-11-22).
+    # Price is not among V(s)'s inputs (DynamicPricingEnv._get_obs), so V
+    # cannot tell which tier was charged. Price reaches it only through the
+    # hindsight units, which also scale the actual reward, so the units cancel.
+    # What is left is a per-unit-margin gauge: it falls when prices sit below
+    # what this policy usually charges. Measured on the rebuilt base_v4, over
+    # 17 non-overlapping trials:
+    #   * It catches a pricer stuck at -10% (pos 14/17 vs revenue 1/17).
+    #   * It does not catch one stuck at base or at +10%. The floor is
+    #     one-sided, and +10% raises margin.
+    #   * It does not catch a 2x price-sensitive world (an elasticity shift
+    #     looks like ordinary demand).
+    #   * A one-number markup index, reward over M x base x sold, matches it,
+    #     and beats it on the marketplace.
+    # So treat it as a markup alarm, not a judge of pricing quality. The earlier
+    # "13/15 and 12/15" claims came from a lost scratch script on the old
+    # pricer, and they do not reproduce.
+    #
+    # The action never changes the next state (step reads the next dataset
+    # row). But PPO trains with gamma 0.99 over SKU-ordered rows, so V(s) is
+    # mostly a discounted return over the same SKU's coming days, not today's
+    # reward. That is why the fitted slope b is tiny (~0.014). The line
+    # r = a + b V is fitted on the training window. The monitor's warm-up
+    # absorbs whatever offset the live world adds: the sim applies raw
+    # elasticity, while the env applies a normalised one.
 
     #: Quotes kept for the after-the-day question, in days.
     QUOTE_DAYS = 3
@@ -396,6 +420,68 @@ class LocalInference:
         obs = np.stack([self._observation(env, i, q, d) for i, q, d in zip(rows, inv, asked)])
         v = self._critic_values(self.pricer(), obs)
         return float(np.sum(r)), float(np.sum(a + b * v))
+
+    # ── Pricing drift signal: the markup index (models.rl_signal = "markup") ──
+    #
+    # The day's training reward against M x sum(base_price x sold) / 1000. M is
+    # ONE number: the reward per unit of base-price turnover the pricer earned
+    # over its training window at its own prices. The ratio falls when the
+    # pricer's margin per unit falls below what it normally earns. That is what
+    # the critic signal measures too (see the block above), and replay shows
+    # this matching or beating it with no network call (results/critic_compare/).
+    # Refitted for each new pricer, like the critic line.
+
+    def markup_coefficient(self) -> float:
+        pricer = self.pricer()
+        with self._critic_lock:
+            if self._markup_fit_for == id(pricer) and self._markup_coef is not None:
+                return self._markup_coef
+        import torch  # noqa: PLC0415
+        env = self._shared_env()
+        base_dates = pd.to_datetime(self.data["rl_base"]["date"]).unique()
+        idx = np.flatnonzero(pd.to_datetime(env.df["date"]).isin(base_dates).to_numpy())
+        obs = np.stack([env._get_obs(int(i)) for i in idx]).astype(np.float32)
+        with torch.no_grad():
+            t = torch.as_tensor(obs, device=pricer.policy.device)
+            acts = pricer.policy._predict(t, deterministic=True).cpu().numpy().ravel()
+        base = env._base_price[idx].astype(float)
+        price = base * (1.0 + np.asarray(env.price_tiers, dtype=float)[acts])
+        demand = np.maximum(env._realized_demand[idx].astype(float), 0.0)
+        asked = np.maximum(0.0, np.round(demand * (price / np.maximum(base, 1e-6))
+                                         ** env._elasticity[idx].astype(float)))
+        stock = env._inventory_raw[idx].astype(float) if env.inventory_constrained else asked
+        sold = np.minimum(asked, stock)
+        r = self._reward(env, idx, price, sold, asked - sold)
+        denom = float(np.sum(base * sold) / 1000.0)
+        coef = float(np.sum(r) / denom) if denom > 0 else 0.0
+        with self._critic_lock:
+            self._markup_fit_for, self._markup_coef = id(pricer), coef
+        return coef
+
+    def markup_outcome(self, *, sim_date: str, outcomes, share: float) -> Optional[tuple]:
+        """(actual, expected) for the markup signal. `actual` is the same
+        training reward pricing_outcome sums; only the expectation differs.
+        None when nothing traded."""
+        if share <= 0:
+            return None
+        env = self._shared_env()
+        day = pd.Timestamp(sim_date)
+        rows, price, sold, lost = [], [], [], []
+        for o in outcomes:
+            i = self._row_index.get((o["sku"], day))
+            if i is None or o.get("price") is None:
+                continue
+            rows.append(i)
+            price.append(float(o["price"]))
+            sold.append(float(o["sold"]) / share)
+            lost.append(float(o["refused"]) / share)
+        if not rows:
+            return None
+        rows_a = np.asarray(rows)
+        r = self._reward(env, rows_a, np.asarray(price), np.asarray(sold), np.asarray(lost))
+        base = env._base_price[rows_a].astype(float)
+        expected = self.markup_coefficient() * float(np.sum(base * np.asarray(sold)) / 1000.0)
+        return float(np.sum(r)), expected
 
     def forecast(self, sku: str, *, sim_date: str) -> Dict:
         """

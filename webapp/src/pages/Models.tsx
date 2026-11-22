@@ -7,6 +7,20 @@ import { usePaged, usePoll } from '../hooks'
 
 const KIND = { forecasting: 'Demand forecaster', rl: 'Pricing model' } as const
 
+type Tone = 'good' | 'warn' | 'alert' | ''
+/** A manager's reading of one detector: plain words, from the same numbers the
+ * Details table shows. `margin` is how close to its alarm line counts as slipping. */
+function verdict(value: number | null | undefined, line: number | null | undefined,
+                 dir: 'above' | 'below', warmupLeft: number | null | undefined,
+                 words: { ok: string; near: string; bad: string }): { text: string; tone: Tone } {
+  if (warmupLeft) return { text: `still learning what normal looks like (${warmupLeft} days to go)`, tone: '' }
+  if (value == null || line == null) return { text: 'no reading yet', tone: '' }
+  const bad = dir === 'above' ? value > line : value < line
+  const near = dir === 'above' ? value > line * 0.92 : value < line * 1.05
+  return bad ? { text: words.bad, tone: 'alert' } : near ? { text: words.near, tone: 'warn' } : { text: words.ok, tone: 'good' }
+}
+const TONE_COLOR: Record<Tone, string> = { good: 'var(--good)', warn: 'var(--warn)', alert: 'var(--alert)', '': 'var(--muted)' }
+
 export default function Models() {
   const models = usePoll(() => api.models(240), 4000)
   const d = models.data
@@ -28,7 +42,7 @@ export default function Models() {
 
   return (
     <>
-      <PageHead title="Model health" eyebrow={d ? `retraining: SDFT · α ${num(d.sdft_alpha, 2)}` : undefined} />
+      <PageHead title="Model health" eyebrow={d ? <span title={`Retraining method: SDFT (self-distillation), alpha ${num(d.sdft_alpha, 2)}`}>each channel updates its own models when they drift</span> : undefined} />
 
       {models.error && <ErrorBox error={models.error} what="model health" />}
 
@@ -40,11 +54,24 @@ export default function Models() {
               <div className="card-title">
                 <ChannelKey channel={n.node} />
                 <span className="right">{!n.online ? <span className="badge badge-alert">Unreachable</span>
-                  : h?.retrain_in_flight ? <span className="badge badge-warn">Retraining</span>
+                  : h?.retrain_in_flight ? <span className="badge badge-warn">Updating</span>
                   : <span className="badge badge-good">Serving</span>}</span>
               </div>
               {!n.online ? <div className="caption" style={{ marginTop: '.5rem' }}>{n.error}</div> : (
                 <>
+                  {(() => {
+                    const f = verdict(st?.last_mase, st?.fc_threshold, 'above', st?.fc_warmup_left,
+                      { ok: 'normal', near: 'slipping towards its alarm line', bad: 'worse than usual' })
+                    const r = verdict(st?.last_profit_index, st?.rl_threshold, 'below', st?.rl_warmup_left,
+                      { ok: 'normal', near: 'close to its alarm line', bad: 'earning less than usual' })
+                    return (
+                      <div style={{ margin: '.6rem 0 .2rem', display: 'grid', gap: '.2rem' }}>
+                        <div><span className="dot" style={{ background: TONE_COLOR[f.tone] }} /> <strong>Forecasts:</strong> {f.text}</div>
+                        <div><span className="dot" style={{ background: TONE_COLOR[r.tone] }} /> <strong>Pricing:</strong> {r.text}</div>
+                        {h?.retrain_in_flight && <div className="caption">Updating a model now; the current one keeps serving until the new one is ready.</div>}
+                      </div>
+                    )
+                  })()}
                   <div className="metric-row" style={{ margin: '.7rem 0 .5rem' }}>
                     <div>
                       <div className="metric-label" title="Profit achieved / profit expected. Below the dashed line two days running triggers a retrain.">Profit index</div>
@@ -53,6 +80,8 @@ export default function Models() {
                     <Sparkline data={(n.drift?.stream ?? []).filter(r => r.profit_index != null).slice(-40).map(r => ({ label: shortDate(r.display_date), v: r.profit_index }))}
                       reference={st?.rl_threshold} width={120} height={34} fmt={v => v.toFixed(3)} color={channelColor(n.node)} />
                   </div>
+                  <details style={{ marginTop: '.3rem' }}>
+                  <summary className="caption" style={{ cursor: 'pointer' }}>Details</summary>
                   <table className="kv"><tbody>
                     <tr><td title="Retrain when the profit index is below this two days running. Provisional: set from the new model's first week and refined daily until its full calibration">Pricing floor</td><td>{st?.rl_provisional ? `${num(st.rl_threshold, 3)} · provisional` : st?.rl_warmup_left ? `calibrating · ${st.rl_warmup_left}d` : num(st?.rl_threshold, 3)}</td></tr>
                     <tr><td>Version</td><td>v{num(h?.model_generation)}</td></tr>
@@ -62,6 +91,7 @@ export default function Models() {
                     <tr><td>Last forecast check</td><td>{h?.last_fc_check ? ago(h.last_fc_check.ts) : 'not yet'}</td></tr>
                     <tr><td>Checks · warnings</td><td>{num(st?.checks)} · {num(st?.n_events)}</td></tr>
                   </tbody></table>
+                  </details>
                 </>
               )}
             </div>
@@ -86,8 +116,8 @@ export default function Models() {
         </div>
       </Section>
 
-      <Section title="Drift warnings">
-        {!events.length ? <Empty title="No drift detected" /> : (
+      <Section title="Model alerts">
+        {!events.length ? <Empty title="Models are behaving as usual" /> : (
           <div className="table-wrap">
             <table className="t">
               <thead><tr><th>Trading day</th><th>Channel</th><th>Model</th><th className="num">Value</th><th className="num">Threshold</th></tr></thead>

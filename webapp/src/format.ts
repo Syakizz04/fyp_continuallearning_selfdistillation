@@ -69,3 +69,29 @@ export const channelColor = (c: string) => CHANNEL_HEX[c] ?? '#8A8A84'
 export const BOUND_LABEL: Record<string, string> = {
   min_margin: 'Margin floor', min_price: 'Min price', max_price: 'Max price',
 }
+
+/**
+ * One line of context for a price recommendation, built only from what the
+ * recommendation carries. It is CONTEXT, not the model's reason: the pricer is
+ * a neural policy and does not explain itself, so this says what the model was
+ * looking at (stock, demand, rules) and which way it moved, and stops there.
+ */
+export function recContext(r: {
+  tier: number | null; inventory_view: number | null; true_available: number | null
+  forecast_p50_total: number | null; bound_by: string[]; shelf_price?: number | null
+  final_price: number
+}): string {
+  const bits: string[] = []
+  if (r.tier != null && Math.abs(r.tier) > 1e-9) bits.push(`model ${r.tier > 0 ? 'raises' : 'cuts'} ${Math.round(Math.abs(r.tier) * 100)}% from base`)
+  else if (r.tier != null) bits.push('model keeps the base price')
+  const daily = r.forecast_p50_total != null && r.forecast_p50_total > 0 ? r.forecast_p50_total / 14 : null
+  if (r.inventory_view != null && daily) {
+    const days = r.inventory_view / daily
+    bits.push(days < 1 ? 'under a day of stock in view' : `~${Math.round(days)} days of stock in view`)
+  }
+  if (r.inventory_view != null && r.true_available != null && Math.abs(r.inventory_view - r.true_available) >= Math.max(2, 0.2 * r.true_available))
+    bits.push(`this channel sees ${Math.round(r.inventory_view)} of ${Math.round(r.true_available)} units`)
+  if (r.bound_by.length) bits.push(`held by ${r.bound_by.map(b => (BOUND_LABEL[b] ?? b).toLowerCase()).join(' + ')} rule`)
+  if (r.shelf_price != null && Math.abs(r.final_price - r.shelf_price) < 0.005) bits.push('no change from the shelf')
+  return bits.join(' · ')
+}

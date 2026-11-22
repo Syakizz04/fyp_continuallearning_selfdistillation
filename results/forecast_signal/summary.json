@@ -1,0 +1,41 @@
+{
+  "rows": 181412,
+  "ckpt_dir": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\outputs\\drift\\checkpoints\\base_v4",
+  "data_dir": "C:\\Users\\MDT\\Downloads\\projects\\fyp_continuallearning_selfdistillation\\data\\processed_m5_v4",
+  "table": [
+    {
+      "signal": "28-day rolling mean",
+      "MAE": 1.4886107707475644,
+      "corr": 0.8039123368373797,
+      "std": 3.8919808138688077,
+      "bias": 0.002663629118880159
+    },
+    {
+      "signal": "TFT h=0",
+      "MAE": 1.5387317926235249,
+      "corr": 0.7823911312790547,
+      "std": 4.476790644733995,
+      "bias": -0.2070460067666743
+    }
+  ],
+  "tft_stats": {
+    "tft_rows_predicted": 181412,
+    "tail_windows_deduped": 4300
+  },
+  "original_2943253": [
+    {
+      "signal": "28-day rolling mean",
+      "MAE": 1.489,
+      "corr": 0.804,
+      "std": 3.892,
+      "bias": 0.003
+    },
+    {
+      "signal": "TFT h=0",
+      "MAE": 2.432,
+      "corr": 0.505,
+      "std": 5.202,
+      "bias": 0.067
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { DLink } from '../components/DLink'
-import { api, ApiError, type RecStatus } from '../api'
+import { api, ApiError, type RecStatus, type Recommendation } from '../api'
 import { Decide } from '../components/Decide'
 import { PriceBand } from '../charts/Micro'
-import { BoundBadges, ChannelKey, Empty, ErrorBox, PageHead, Pager, PriceMove, ReadOnly, StatusBadge, Tabs } from '../components/ui'
+import { BoundBadges, Callout, ChannelKey, Empty, ErrorBox, PageHead, Pager, PriceMove, ReadOnly, StatusBadge, Tabs } from '../components/ui'
 import { useApp } from '../context'
-import { ago, channelLabel, longDate, num, pct, shortDate } from '../format'
+import { ago, channelLabel, longDate, money, num, pct, recContext, shortDate } from '../format'
 import { usePoll } from '../hooks'
 
 type Tab = 'pending' | 'mine' | 'all'
@@ -21,9 +21,14 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
   const [busy, setBusy] = useState(false)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(10)
+  // Rows decided one at a time on this view, kept where they were (showing
+  // their new status) so the row below does not slide up under the pointer
+  // and catch a second click. Cleared whenever the view itself changes.
+  const [held, setHeld] = useState<Map<number, { rec: Recommendation; index: number }>>(new Map())
 
   // Any filter change starts again from the first page.
   useEffect(() => { setOffset(0); setPicked(new Set()) }, [tab, channel, statusFilter, q, onlyBound])
+  useEffect(() => { setHeld(new Map()) }, [tab, channel, statusFilter, q, onlyBound, offset, limit, status.data?.display_date])
 
   const recs = usePoll(() => api.recommendationsPage({
     status: tab === 'pending' ? 'pending' : (statusFilter || undefined),
@@ -31,7 +36,17 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
   }), 4000, [tab, channel, statusFilter, q, onlyBound, limit, offset, version])
   const mine = usePoll(() => api.decisions(user || undefined), tab === 'mine' ? 5000 : null, [tab, user, version])
 
-  const rows = recs.data?.items ?? []
+  const fetched = recs.data?.items ?? []
+  const rows = (() => {
+    if (!held.size) return fetched
+    const out = fetched.filter(r => !held.has(r.id))
+    ;[...held.values()].sort((a, b) => a.index - b.index)
+      .forEach(h => out.splice(Math.min(h.index, out.length), 0, h.rec))
+    return out
+  })()
+  const hold = (d: Recommendation) => setHeld(m => {
+    const n = new Map(m); n.set(d.id, { rec: d, index: rows.findIndex(x => x.id === d.id) }); return n
+  })
   const total = recs.data?.total ?? 0
   // Deciding rows on the last page can empty it: step back rather than show nothing.
   useEffect(() => { if (recs.data && offset > 0 && offset >= total) setOffset(Math.max(0, Math.ceil(total / limit) - 1) * limit) },
@@ -39,6 +54,12 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
   const pendingIds = canEdit ? rows.filter(r => r.status === 'pending').map(r => r.id) : []
   const allPicked = pendingIds.length > 0 && pendingIds.every(id => picked.has(id))
   const counts = status.data?.counts
+  // Undecided prices are not left waiting: when the next trading day opens they
+  // go on sale as recommended, unless the simulator requires approval. The tab
+  // used to say "Awaiting decision" either way, which read as "nothing happens
+  // until I act".
+  const gated = status.data?.sim?.require_approval ?? false
+  const pendingLabel = gated ? 'Needs approval' : 'Goes live unless you act'
 
   const toggle = (id: number) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const bulk = async (action: 'approve' | 'reject') => {
@@ -57,7 +78,7 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
       <PageHead title={title} eyebrow={longDate(status.data?.display_date)} actions={!canEdit && <ReadOnly />} />
 
       <Tabs value={tab} onChange={t => { setTab(t); setPicked(new Set()) }} items={[
-        { id: 'pending', label: 'Awaiting decision', count: counts?.pending },
+        { id: 'pending', label: pendingLabel, count: counts?.pending },
         ...(canEdit ? [{ id: 'mine' as Tab, label: 'My decisions' }] : []),
         { id: 'all', label: 'All' },
       ]} />
@@ -84,6 +105,15 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
           </div>
       ) : (
         <>
+          {tab === 'pending' && (
+            <div style={{ marginBottom: '.75rem' }}>
+              <Callout kind="info">
+                {gated
+                  ? <>Only approved prices go on sale. Anything you leave undecided keeps today's shelf price when the next trading day opens.</>
+                  : <>Anything you leave undecided <strong>goes on sale as recommended</strong> when the next trading day opens. Reject a price to keep the shelf price.</>}
+              </Callout>
+            </div>
+          )}
           <div className="filters">
             <input className="input" placeholder="Search SKU" value={q} onChange={e => setQ(e.target.value)} style={{ width: 200 }} />
             <select className="select" value={channel} onChange={e => setChannel(e.target.value)} aria-label="Channel">
@@ -123,7 +153,8 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
                           onChange={() => setPicked(allPicked ? new Set() : new Set(pendingIds))} />
                       </th>}
                       <th title="Trading day">Day</th><th>SKU</th><th>Channel</th>
-                      <th className="num" style={{ textAlign: 'center' }}>Price</th><th style={{ textAlign: 'center' }} title="Allowed band (shaded), model's own price (hollow), recommendation (solid), base (tick)">In band</th><th className="num">Margin</th><th>Rule</th>
+                      <th className="num" title="On the shelf now (pending), or what went on sale (decided)">Shelf now</th>
+                      <th className="num" style={{ textAlign: 'center' }}>Recommended</th><th style={{ textAlign: 'center' }} title="Allowed band (shaded), model's own price (hollow), recommendation (solid), base (tick)">In band</th><th className="num">Margin</th><th>Rule</th>
                       <th className="num" title="Stock this channel believes is available / actual stock">Stock</th>
                       <th>Decision</th>
                     </tr></thead>
@@ -131,8 +162,12 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
                       <tr key={r.id} className={picked.has(r.id) ? 'selected' : ''}>
                         {canEdit && <td>{r.status === 'pending' && <input type="checkbox" aria-label={`Select ${r.sku} ${r.channel}`} checked={picked.has(r.id)} onChange={() => toggle(r.id)} />}</td>}
                         <td className="mono">{shortDate(r.display_date)}</td>
-                        <td className="mono"><DLink to={`/products/${r.sku}`}>{r.sku}</DLink></td>
+                        <td>
+                          <div className="mono"><DLink to={`/products/${r.sku}`}>{r.sku}</DLink></div>
+                          {recContext(r) && <div className="caption" style={{ maxWidth: 280, whiteSpace: 'normal' }}>{recContext(r)}</div>}
+                        </td>
                         <td><ChannelKey channel={r.channel} /></td>
+                        <td className="num">{money(r.status === 'pending' ? r.shelf_price : r.live_price)}</td>
                         <td className="num" style={{ textAlign: 'center' }}><PriceMove raw={r.raw_price} final={r.final_price} base={r.base_price} /></td>
                         <td style={{ textAlign: 'center' }}><PriceBand raw={r.raw_price} final={r.final_price} base={r.base_price} floor={r.floor} ceiling={r.ceiling} width={84} /></td>
                         <td className="num">{pct(r.margin_pct)}</td>
@@ -140,8 +175,8 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
                         <td className="num">
                           {num(r.inventory_view)} <span className="faint">/ {num(r.true_available)}</span>
                         </td>
-                        <td>{r.status === 'pending' ? <Decide rec={r} compact /> :
-                          <span className="btn-row" style={{ gap: '.4rem' }}><StatusBadge status={r.status} />{r.decided_by && <span className="caption">{r.decided_by}</span>}</span>}</td>
+                        <td>{r.status === 'pending' ? <Decide rec={r} compact onDone={hold} /> :
+                          <span className="btn-row" style={{ gap: '.4rem' }}><StatusBadge status={r.status} liveSource={r.live_source} />{r.decided_by && <span className="caption">{r.decided_by}</span>}</span>}</td>
                       </tr>
                     ))}</tbody>
                   </table>

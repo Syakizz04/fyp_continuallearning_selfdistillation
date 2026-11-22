@@ -33,3 +33,6 @@ lightning_logs/
 
 # Archives of run outputs moved to and from the GPU box.
 *.tar.gz
+
+# Files pulled from the old laptop by experiments/laptop_transfer.py
+recovered/

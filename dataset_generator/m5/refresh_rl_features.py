@@ -48,6 +48,19 @@ rescues it. This is the same fact the walk MASE of ~1.47 reports from the other
 direction: the base forecaster does not beat naive baselines on sparse
 intermittent M5 demand.
 
+**Re-measured 2026-11-22 on the rebuilt base TFT** (the one above was lost with
+the old laptop). Run `python -m experiments.forecast_signal_check`; the
+results are in results/forecast_signal/summary.json. Same 181,412 rows:
+
+    signal                        MAE    corr     std     bias
+    28-day rolling mean         1.489   0.804   3.892   +0.003
+    TFT h=0 (rebuilt)           1.539   0.782   4.477   -0.207
+
+The gap shrank from 63% to 3%. The rolling mean still wins on MAE, correlation
+and bias, so the decision stands. Its reason is now narrower: the TFT is
+close, not broken. The "does not beat naive baselines" sentence above was true
+of the original model only; the rebuilt one calibrates at MASE 0.891.
+
 Feeding the pricer the worse signal buys architectural tidiness and costs
 accuracy, so the default is `rolling`. The defensible position is the measured
 one: the pricer uses the better of the two signals available to the node, and

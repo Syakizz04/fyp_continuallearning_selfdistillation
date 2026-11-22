@@ -99,6 +99,7 @@ from drift_pipeline import retrain as rt  # noqa: E402
 from drift_pipeline.censoring import (CensoringSpec, assert_uncensored,  # noqa: E402
                                       attach_unmet_demand, censor_data_dict)
 from drift_pipeline.core_pipeline import CONFIG, prepare_drift_data  # noqa: E402
+from experiments.provenance import write_run_meta  # noqa: E402
 
 console = Console()
 
@@ -402,6 +403,15 @@ def main(argv=None) -> int:
         cal = args.base_ckpt / "calibration.json"
         if cal.exists():
             shutil.copy2(cal, cell_dir / "calibration.json")
+        # What produced this cell: commit, versions, resolved CONFIG, data and
+        # checkpoint hashes. Rewritten on a resume, so it always reflects the
+        # code that most recently ran here.
+        write_run_meta(cell_dir, data_dir=args.data_dir, ckpt_dir=args.base_ckpt,
+                       extra={"experiment": "E2", "censoring": censoring,
+                              "arms": args.arms, "seed": args.seed,
+                              "scarcity_power": args.scarcity_power,
+                              "max_checks": args.max_checks,
+                              "fill_rate": report.get("fill_rate")})
 
         if args.dry_run:
             continue

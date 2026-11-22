@@ -13,6 +13,12 @@ The verdict is deliberately conservative. A gap counts as real only if its SIGN
 is the same in every seed AND its smallest magnitude exceeds the spread of the
 deltas themselves. With three seeds that is a weak test - it is meant to stop
 you claiming a difference that is not there, not to certify one that is.
+
+This rule is pre-registered for the post-rebuild E2 re-run: see
+experiments/PREREGISTRATION_E2.md. It asks for 5 seeds, the primary metric
+forgetting_mase_base_era, and the primary contrast sdft - replay. The mean
+delta, t-based 95% interval and sign-test p printed beside each verdict are
+DESCRIPTIVE. The verdict is the sign + spread rule alone.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -35,6 +42,22 @@ console = Console()
 
 #: Lower is better for both, so a NEGATIVE delta means the arm beat the reference.
 METRICS = ["forgetting_mase_base_era", "walk_mase_mean"]
+#: PREREGISTRATION_E2.md: fewer seeds than this is not the pre-registered run.
+MIN_SEEDS = 5
+
+
+def describe(d: pd.Series) -> str:
+    """Mean delta, t-based 95% CI over seeds, exact two-sided sign-test p."""
+    n = len(d)
+    mean = float(d.mean())
+    if n > 1:
+        half = float(stats.t.ppf(0.975, n - 1) * d.std(ddof=1) / np.sqrt(n))
+        ci = f"[{mean - half:+.4f}, {mean + half:+.4f}]"
+    else:
+        ci = "[n/a]"
+    pos, neg = int((d > 0).sum()), int((d < 0).sum())
+    p = float(stats.binomtest(min(pos, neg), pos + neg, 0.5).pvalue) if pos + neg else 1.0
+    return f"mean={mean:+.4f} ci95={ci} sign-p={p:.3f}"
 
 
 def load(censoring: str) -> pd.DataFrame:
@@ -66,6 +89,10 @@ def main(argv=None) -> int:
     seeds = sorted(df.seed.unique())
     console.print(f"[bold]Replicates[/bold] censoring={args.censoring}  "
                   f"seeds={seeds}  arms={sorted(df.arm.unique())}\n")
+    if len(seeds) < MIN_SEEDS:
+        console.print(f"[yellow]only {len(seeds)} seed(s); the pre-registered run "
+                      f"(experiments/PREREGISTRATION_E2.md) uses {MIN_SEEDS}. "
+                      f"Treat verdicts as provisional.[/yellow]\n")
 
     for metric in METRICS:
         if metric not in df.columns:
@@ -95,6 +122,7 @@ def main(argv=None) -> int:
                 console.print(f"    {arm:8s} " +
                               "  ".join(f"{s}:{v:+.4f}" for s, v in d.items()) +
                               f"   spread={spread:.4f}  {verdict}")
+                console.print(f"             [dim]{describe(d)}[/dim]")
         console.print()
 
     console.print("[dim]'not separable' means the arms cannot be ranked at this "

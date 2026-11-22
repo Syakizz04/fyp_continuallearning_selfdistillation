@@ -1,0 +1,44 @@
+Loading M5 datasets...
+  RL: ignoring 1 unused column(s): unmet_demand
+  Demand CSV  : 184,412 rows x 15 cols
+  RL CSV      : 184,412 rows x 16 cols
+✓ Data loaded and cleaned
+  auto-pruned constant feature(s): region_id -> group_ids=['product_id'], 
+static_categoricals=['product_id', 'product_category']
+✓ Loaded base TFT + PPO + calibration
+[critic_compare] models from C:\Users\MDT\Downloads\projects\fyp_continuallearning_selfdistillation\outputs\drift\checkpoints\base_v4 loaded in 7s; critic line r = -0.0032 + 0.0137 V; markup M = 0.4327
+[critic_compare] SKUs: ['FOODS_3_080', 'FOODS_3_555', 'FOODS_3_723', 'FOODS_3_668', 'FOODS_3_219', 'FOODS_2_152', 'FOODS_2_388', 'FOODS_1_054', 'FOODS_2_342', 'FOODS_2_309']
+[critic_compare] none: 17 trials (11s)
+[critic_compare] stuck-10: 17 trials (12s)
+[critic_compare] stuck0: 17 trials (12s)
+[critic_compare] stuck+10: 17 trials (12s)
+[critic_compare] sensitive2: 17 trials (13s)
+[critic_compare] sensitive6: 17 trials (15s)
+[critic_compare] false-alarm run done (14s)
+
+== caught within 28 days, Wilson 95% CI (17 non-overlapping trials) ==
+  fault       channel                 revenue              critic              markup   McNemar p (critic vs revenue / markup)
+  none        pos            1/17 [0.01,0.27]    1/17 [0.01,0.27]    2/17 [0.03,0.34]   1.000 / 1.000
+  none        web            2/17 [0.03,0.34]    2/17 [0.03,0.34]    2/17 [0.03,0.34]   1.000 / 1.000
+  none        marketplace    2/17 [0.03,0.34]    0/17 [0.00,0.18]    2/17 [0.03,0.34]   0.500 / 0.500
+  stuck-10    pos            1/17 [0.01,0.27]   14/17 [0.59,0.94]   12/17 [0.47,0.87]   0.000 / 0.688
+  stuck-10    web            0/17 [0.00,0.18]    9/17 [0.31,0.74]   11/17 [0.41,0.83]   0.004 / 0.625
+  stuck-10    marketplace    1/17 [0.01,0.27]    3/17 [0.06,0.41]    9/17 [0.31,0.74]   0.625 / 0.031
+  stuck0      pos            2/17 [0.03,0.34]    1/17 [0.01,0.27]    0/17 [0.00,0.18]   1.000 / 1.000
+  stuck0      web            1/17 [0.01,0.27]    1/17 [0.01,0.27]    0/17 [0.00,0.18]   1.000 / 1.000
+  stuck0      marketplace    3/17 [0.06,0.41]    1/17 [0.01,0.27]    0/17 [0.00,0.18]   0.500 / 1.000
+  stuck+10    pos            3/17 [0.06,0.41]    0/17 [0.00,0.18]    0/17 [0.00,0.18]   0.250 / 1.000
+  stuck+10    web            6/17 [0.17,0.59]    0/17 [0.00,0.18]    0/17 [0.00,0.18]   0.031 / 1.000
+  stuck+10    marketplace    2/17 [0.03,0.34]    0/17 [0.00,0.18]    0/17 [0.00,0.18]   0.500 / 1.000
+  sensitive2  pos            3/17 [0.06,0.41]    0/17 [0.00,0.18]    2/17 [0.03,0.34]   0.250 / 0.500
+  sensitive2  web            4/17 [0.10,0.47]    1/17 [0.01,0.27]    3/17 [0.06,0.41]   0.375 / 0.625
+  sensitive2  marketplace    0/17 [0.00,0.18]    0/17 [0.00,0.18]    3/17 [0.06,0.41]   1.000 / 0.250
+  sensitive6  pos            7/17 [0.22,0.64]    1/17 [0.01,0.27]    6/17 [0.17,0.59]   0.031 / 0.062
+  sensitive6  web            7/17 [0.22,0.64]    3/17 [0.06,0.41]   10/17 [0.36,0.78]   0.219 / 0.016
+  sensitive6  marketplace    1/17 [0.01,0.27]    4/17 [0.10,0.47]    9/17 [0.31,0.74]   0.250 / 0.125
+== false alarms per year, normal trading (3.0 y) ==
+  pos          revenue 1.67 [0.54,3.89]   critic 0.67 [0.08,2.41]   markup 0.0 [0.0,1.23]
+  web          revenue 0.67 [0.08,2.41]   critic 0.67 [0.08,2.41]   markup 0.0 [0.0,1.23]
+  marketplace  revenue 0.0 [0.0,1.23]   critic 0.0 [0.0,1.23]   markup 0.0 [0.0,1.23]
+
+written to C:\Users\MDT\Downloads\projects\fyp_continuallearning_selfdistillation\outputs\system\critic_compare

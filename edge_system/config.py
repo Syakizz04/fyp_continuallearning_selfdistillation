@@ -90,12 +90,29 @@ SYSTEM_CONFIG: Dict = {
         #               the forecast check: the day's training reward over what
         #               PPO's critic expected, asked after the day with the
         #               demand that turned up. Needs no true demand curve.
-        #               Replayed 2013-2014 (see LocalInference.pricing_outcome):
-        #               caught a broken pricer 13/15 and a 2x price-sensitive
-        #               world 12/15, against 4/15 and 1/15 for "revenue", at 2-3.5
-        #               retrains a year either way. A demo setting; E2 does not
-        #               use the node monitor.
-        "rl_signal": "critic",
+        #               Measured (experiments/critic_compare.py, rebuilt base_v4,
+        #               17 non-overlapping trials 2013-2015): catches a pricer
+        #               stuck at -10% (pos 14/17, web 9/17; revenue 1/17, 0/17),
+        #               but not one stuck at base or +10%, and not a 2x
+        #               price-sensitive world (0-1/17, the same as no fault). It
+        #               is a one-sided markup gauge. A one-number markup index
+        #               matches it (12/17, 11/17) or beats it (marketplace 9/17 vs
+        #               3/17), because price is not in V(s)'s inputs. The earlier
+        #               "13/15 and 12/15" figures (old pricer, lost script) do
+        #               not reproduce.
+        #   "markup"  - the day's training reward over M x base-price turnover,
+        #               with M one number fitted on the training window
+        #               (LocalInference.markup_outcome). It measures what
+        #               "critic" measures, with no network and no regression
+        #               onto V. In replay: stuck -10% pos 12/17, web 11/17,
+        #               marketplace 9/17; 2x/6x price-sensitive at least as
+        #               well as critic; 0 false alarms in 3 years (critic 0.67
+        #               a year on pos/web). Same limits as critic: one-sided,
+        #               so +10% and a stuck base price go unseen, and an
+        #               elasticity shift is mostly invisible. Default since
+        #               2026-11-22. "critic" stays one flag away.
+        # A demo setting; E2 does not use the node monitor.
+        "rl_signal": "markup",
         "rl_window_days": 7,
         "rl_warmup_days": 28,
         "rl_k_sigma": 2.5,

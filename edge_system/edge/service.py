@@ -249,14 +249,16 @@ def check(req: CheckRequest) -> Dict:
     profit_index, revenue, reference = req.profit_index, req.revenue, req.reference
     # Rolling mode only: the fixed detector holds one day against a floor of
     # 1.0, which is calibrated to the revenue index and means nothing here.
-    if (SYSTEM_CONFIG["models"].get("rl_signal", "revenue") == "critic"
+    signal = SYSTEM_CONFIG["models"].get("rl_signal", "revenue")
+    if (signal in ("critic", "markup")
             and NODE.monitor.rl_mode == "rolling"
             and req.pricing is not None and NODE.inference is not None):
         # Outside the monitor lock: a few ms normally, seconds once per pricer
-        # (the critic's line is refitted for a new one).
-        got = NODE.inference.pricing_outcome(
-            sim_date=req.sim_date, outcomes=req.pricing,
-            share=float(channel(NODE.name).get("weight", 1.0)))
+        # (the critic's line / markup coefficient is refitted for a new one).
+        judge = (NODE.inference.pricing_outcome if signal == "critic"
+                 else NODE.inference.markup_outcome)
+        got = judge(sim_date=req.sim_date, outcomes=req.pricing,
+                    share=float(channel(NODE.name).get("weight", 1.0)))
         if got is None:
             profit_index = revenue = reference = None      # nothing traded: no reading
         else:

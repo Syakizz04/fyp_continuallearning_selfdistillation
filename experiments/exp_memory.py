@@ -55,7 +55,7 @@ def _fmt(mb: float) -> str:
     return f"{mb:8.2f} MB"
 
 
-def measure_static(n_batches: int = N_PROBE_BATCHES) -> pd.DataFrame:
+def measure_static(n_batches: int = N_PROBE_BATCHES, *, data_dir: Path, ckpt_dir: Path) -> pd.DataFrame:
     """Size every CL structure against the real base models. No training."""
     import copy
 
@@ -74,8 +74,13 @@ def measure_static(n_batches: int = N_PROBE_BATCHES) -> pd.DataFrame:
     # persisted base meta, in which `adapt_config_to_data` has already dropped
     # constant columns. Preparing data afterwards would then re-drop them and
     # fail. The real pipeline prepares data first for the same reason.
+    # Explicit paths, as in E2: CONFIG's defaults still name the lost v1 data
+    # (data/processed_m5) and load_base() hardcodes checkpoints/base.
+    from experiments.exp_staleness_cl import base_paths  # noqa: PLC0415
+    CONFIG["paths"]["demand_csv"] = str(data_dir / "demand_forecasting.csv")
+    CONFIG["paths"]["rl_csv"] = str(data_dir / "rl_environment.csv")
     data = prepare_drift_data()
-    base = mon.load_base()
+    base = mon.load_base(base_paths(ckpt_dir))
     model, train_ds, pricer = base["forecaster"], base["train_ds"], base["pricer"]
 
     rows: List[Dict] = []
@@ -280,6 +285,11 @@ def main(argv=None) -> int:
     ap.add_argument("--batches", type=int, default=N_PROBE_BATCHES,
                     help="replay batches to probe for the per-batch rate")
     ap.add_argument("--out", default="e4_memory")
+    ap.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data" / "processed_m5_v4",
+                    help="same default as E2")
+    ap.add_argument("--base-ckpt", type=Path,
+                    default=PROJECT_ROOT / "outputs" / "drift" / "checkpoints" / "base_v4",
+                    help="same default as E2")
     args = ap.parse_args(argv)
 
     if not args.static and not args.aggregate:
@@ -289,7 +299,7 @@ def main(argv=None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.static:
-        df = measure_static(args.batches)
+        df = measure_static(args.batches, data_dir=args.data_dir, ckpt_dir=args.base_ckpt)
         report_static(df)
         path = out_dir / f"{args.out}_static.csv"
         df.to_csv(path, index=False)

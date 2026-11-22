@@ -1,0 +1,52 @@
+REBUILD SUMMARY (written by Claude, 22 Nov 2026 ~00:50) - read this first
+=========================================================================
+
+Training finished cleanly in 61 min on CPU (EXIT 0).
+  checkpoints: outputs/drift/checkpoints/base/ and base_v4/
+  calibration: outputs/drift/results_rebuild/ (the old FYP1 results/ are untouched)
+  Raw numbers + the 6-check walk comparison: REBUILD_REPORT.txt
+
+THE HEADLINE: the data reproduces exactly, but the new forecaster does NOT match
+the old one. It is much BETTER.
+
+                         old base TFT   rebuilt TFT
+  calibration MASE mu       1.481          0.891     (sigma 0.040 -> 0.018)
+  calibration RMSE          6.41           3.48      (raw error in units sold)
+  calibration sMAPE         155.1          148.3
+  drift threshold (k=2)     1.560          ~0.926
+
+  6-check frozen walk       1.4695         0.8970    (every check ~0.6x the old;
+                                                       same week-to-week shape)
+
+RMSE has no scaling, so this is a real difference in forecasts, not a MASE
+denominator effect. A retrain draw explains ~0.04 of MASE, not 0.59.
+
+Why: evidence that the ORIGINAL base TFT was not trained on this v4 data.
+  1. Today's code cannot even train on v4: FOODS_3_321 starts after the
+     train/val split and crashes it (fixed in drift_pipeline/trainers.py).
+     pytorch-forecasting 1.1-1.7 all crash the same way, so the original
+     fit must have used different data.
+  2. The old TFT was worse than predicting the mean (RMSE 6.4 > data std 4.68;
+     commit 2943253: TFT MAE 2.43 vs 28-day mean 1.49). The new one is not.
+  Most likely the original was trained on the lost v1 build (data/processed_m5),
+  whose forecasting rows differed (e.g. zero-padded pre-launch days).
+  v1 cannot be recovered.
+
+Pricer: ref profit mu 3872.45 vs old base_v4 3971.00 (-2.5%, within tolerance).
+(Step 2 of the recipe gave an identical pricer to step 1, since both trained
+on v4 with the same seed. Expected.)
+
+WHAT THIS MEANS FOR THE PROJECT
+  * Any FYP2 result that depends on the forecaster (E2's forgetting/walk MASE,
+    drift-trigger counts, retrain schedules) will NOT reproduce with these
+    checkpoints. The thresholds sit ~40% lower and the walk will behave
+    differently. Treat them as a new run.
+  * A written finding flips: "the base forecaster does not beat naive baselines
+    on M5" (MASE ~1.47 > 1) no longer holds. The rebuilt one beats seasonal-naive
+    (MASE 0.89). Check the report draft for that claim.
+  * E1 (sync fill rates), E4 (memory bytes) and the data-side audits do not
+    depend on the forecaster and are unaffected.
+
+DECISION FOR YOU (not made): (a) adopt the rebuilt models and re-run E2 on
+them, or (b) try to recreate v1 to recover the old forecaster. (a) is cleaner
+and the honest framing is "re-run after data loss".

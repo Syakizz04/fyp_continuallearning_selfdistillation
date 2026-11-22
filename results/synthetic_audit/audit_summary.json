@@ -1,0 +1,94 @@
+{
+  "conservation": {
+    "passed": 9,
+    "total": 9,
+    "checks": [
+      {
+        "check": "unmet == max(0, demand - on_hand)",
+        "pass": true,
+        "detail": "max |residual| = 7.10543e-15 over 184,412 rows"
+      },
+      {
+        "check": "stockout_flag <=> unmet > 0",
+        "pass": true,
+        "detail": "mismatches = 0"
+      },
+      {
+        "check": "unmet <= demand",
+        "pass": true,
+        "detail": "violations = 0"
+      },
+      {
+        "check": "on_hand >= 0",
+        "pass": true,
+        "detail": "min on_hand = 0"
+      },
+      {
+        "check": "inventory flow balances",
+        "pass": true,
+        "detail": "open 5 + recv 786 - served 786 = 5 vs closing 5"
+      },
+      {
+        "check": "served == demand - unmet",
+        "pass": true,
+        "detail": "max |residual| = 0"
+      },
+      {
+        "check": "expected_units(base_price) == M5 units",
+        "pass": true,
+        "detail": "max |error| = 0 (the no-model baseline is anchored)"
+      },
+      {
+        "check": "generated orders reproduce M5 units (aggregate)",
+        "pass": true,
+        "detail": "generated 2,926 vs expected 3,005 (-2.63%) over 25 SKUs x 120 days"
+      },
+      {
+        "check": "channel weights sum to 1",
+        "pass": true,
+        "detail": "sum = 1.000000 across 3 channels"
+      }
+    ]
+  },
+  "identification": {
+    "n_items": 100,
+    "n_identified": 54,
+    "share_identified": 0.54,
+    "methods": {
+      "iv": 54,
+      "none": 25,
+      "wrong-sign": 21
+    },
+    "mean_data_weight": 0.2882266277871512,
+    "median_data_weight": 0.13417380723940897,
+    "share_below_half_weight": 0.65,
+    "share_zero_weight": 0.46,
+    "corr_posterior_raw": 0.4117818217671204,
+    "mean_abs_post_minus_prior": 0.3813510233758938,
+    "mean_abs_raw_minus_prior": 1.3080279376046051,
+    "posterior_iqr": [
+      -0.8292005846036902,
+      -0.5842155199169214
+    ],
+    "posterior_median": -0.5977606899661161,
+    "prior_mu": -0.524,
+    "prior_tau2": 0.097969,
+    "prior_source": "reconstructed by hand from dataset_generator/m5/README.md (mu = -0.524, tau = 0.313); the original fitted prior.json was lost with the old laptop",
+    "sd_posterior": 0.6418755608574609,
+    "sd_raw": 2.7906346339533816,
+    "spread_retained": 0.23001060513183025
+  },
+  "price_variation": {
+    "median_unique_prices": 5.0,
+    "median_price_cv": 0.039934411595296204,
+    "median_modal_share": 0.6967372433341124,
+    "share_under_5_prices": 0.35,
+    "median_range_ratio": 1.150687597301505,
+    "n_items": 100,
+    "n_matched": 100,
+    "corr_cv_vs_data_weight": 0.7393152431055842,
+    "corr_modalshare_vs_data_weight": -0.5944288458680106,
+    "median_cv_identified": 0.05090958285528374,
+    "median_cv_unidentified": 0.022013058541176536
+  }
+}
