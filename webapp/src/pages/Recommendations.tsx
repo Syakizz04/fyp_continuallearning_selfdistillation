@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { DLink } from '../components/DLink'
-import { api, ApiError, type RecStatus } from '../api'
+import { api, ApiError, type RecStatus, type Recommendation } from '../api'
 import { Decide } from '../components/Decide'
 import { PriceBand } from '../charts/Micro'
 import { BoundBadges, ChannelKey, Empty, ErrorBox, PageHead, Pager, PriceMove, ReadOnly, StatusBadge, Tabs } from '../components/ui'
@@ -21,9 +21,14 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
   const [busy, setBusy] = useState(false)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(10)
+  // Rows decided one at a time on this view, kept where they were (showing
+  // their new status) so the row below does not slide up under the pointer
+  // and catch a second click. Cleared whenever the view itself changes.
+  const [held, setHeld] = useState<Map<number, { rec: Recommendation; index: number }>>(new Map())
 
   // Any filter change starts again from the first page.
   useEffect(() => { setOffset(0); setPicked(new Set()) }, [tab, channel, statusFilter, q, onlyBound])
+  useEffect(() => { setHeld(new Map()) }, [tab, channel, statusFilter, q, onlyBound, offset, limit, status.data?.display_date])
 
   const recs = usePoll(() => api.recommendationsPage({
     status: tab === 'pending' ? 'pending' : (statusFilter || undefined),
@@ -31,7 +36,17 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
   }), 4000, [tab, channel, statusFilter, q, onlyBound, limit, offset, version])
   const mine = usePoll(() => api.decisions(user || undefined), tab === 'mine' ? 5000 : null, [tab, user, version])
 
-  const rows = recs.data?.items ?? []
+  const fetched = recs.data?.items ?? []
+  const rows = (() => {
+    if (!held.size) return fetched
+    const out = fetched.filter(r => !held.has(r.id))
+    ;[...held.values()].sort((a, b) => a.index - b.index)
+      .forEach(h => out.splice(Math.min(h.index, out.length), 0, h.rec))
+    return out
+  })()
+  const hold = (d: Recommendation) => setHeld(m => {
+    const n = new Map(m); n.set(d.id, { rec: d, index: rows.findIndex(x => x.id === d.id) }); return n
+  })
   const total = recs.data?.total ?? 0
   // Deciding rows on the last page can empty it: step back rather than show nothing.
   useEffect(() => { if (recs.data && offset > 0 && offset >= total) setOffset(Math.max(0, Math.ceil(total / limit) - 1) * limit) },
@@ -140,8 +155,8 @@ export default function Recommendations({ title = 'Recommendations' }: { title?:
                         <td className="num">
                           {num(r.inventory_view)} <span className="faint">/ {num(r.true_available)}</span>
                         </td>
-                        <td>{r.status === 'pending' ? <Decide rec={r} compact /> :
-                          <span className="btn-row" style={{ gap: '.4rem' }}><StatusBadge status={r.status} />{r.decided_by && <span className="caption">{r.decided_by}</span>}</span>}</td>
+                        <td>{r.status === 'pending' ? <Decide rec={r} compact onDone={hold} /> :
+                          <span className="btn-row" style={{ gap: '.4rem' }}><StatusBadge status={r.status} liveSource={r.live_source} />{r.decided_by && <span className="caption">{r.decided_by}</span>}</span>}</td>
                       </tr>
                     ))}</tbody>
                   </table>

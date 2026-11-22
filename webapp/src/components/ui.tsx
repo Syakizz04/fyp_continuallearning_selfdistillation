@@ -83,7 +83,16 @@ const STATUS: Record<RecStatus, { cls: string; label: string }> = {
   rejected:   { cls: 'badge-alert',  label: 'Rejected' },
   superseded: { cls: '',             label: 'Expired' },
 }
-export function StatusBadge({ status }: { status: RecStatus }) {
+/** A superseded (undecided) price either went on sale as recommended or, when
+ * approval is required, never did - `live_source` says which. "Expired" was
+ * the label for both, which read as "not used" for prices that were sold at. */
+const UNDECIDED: Record<string, { cls: string; label: string; title: string }> = {
+  auto:       { cls: '', label: 'Applied automatically', title: 'Nobody decided, so the recommended price went on sale' },
+  unreviewed: { cls: '', label: 'Not applied',           title: 'Approval was required and nobody decided, so the shelf price stayed' },
+}
+export function StatusBadge({ status, liveSource }: { status: RecStatus; liveSource?: string | null }) {
+  const u = status === 'superseded' && liveSource ? UNDECIDED[liveSource] : undefined
+  if (u) return <span className={`badge ${u.cls}`} title={u.title}>{u.label}</span>
   const s = STATUS[status]
   return <span className={`badge ${s.cls}`}>{s.label}</span>
 }
