@@ -1,0 +1,114 @@
+REBUILD SUMMARY (written by Claude, 22 Nov 2026 ~00:50) - read this first
+=========================================================================
+
+Training finished cleanly in 61 min on CPU (EXIT 0).
+  checkpoints: outputs/drift/checkpoints/base/ and base_v4/
+  calibration: outputs/drift/results_rebuild/ (the old FYP1 results/ are untouched)
+  Raw numbers + the 6-check walk comparison: REBUILD_REPORT.txt
+
+THE HEADLINE: the data reproduces exactly, but the new forecaster does NOT match
+the old one. It is much BETTER.
+
+                         old base TFT   rebuilt TFT
+  calibration MASE mu       1.481          0.891     (sigma 0.040 -> 0.018)
+  calibration RMSE          6.41           3.48      (raw error in units sold)
+  calibration sMAPE         155.1          148.3
+  drift threshold (k=2)     1.560          ~0.926
+
+  6-check frozen walk       1.4695         0.8970    (every check ~0.6x the old;
+                                                       same week-to-week shape)
+
+RMSE has no scaling, so this is a real difference in forecasts, not a MASE
+denominator effect. A retrain draw explains ~0.04 of MASE, not 0.59.
+
+Why: evidence that the ORIGINAL base TFT was not trained on this v4 data.
+  1. Today's code cannot even train on v4: FOODS_3_321 starts after the
+     train/val split and crashes it (fixed in drift_pipeline/trainers.py).
+     pytorch-forecasting 1.1-1.7 all crash the same way, so the original
+     fit must have used different data.
+  2. The old TFT was worse than predicting the mean (RMSE 6.4 > data std 4.68;
+     commit 2943253: TFT MAE 2.43 vs 28-day mean 1.49). The new one is not.
+  Most likely the original was trained on the lost v1 build (data/processed_m5),
+  whose forecasting rows differed (e.g. zero-padded pre-launch days).
+  v1 cannot be recovered.
+
+Pricer: ref profit mu 3872.45 vs old base_v4 3971.00 (-2.5%, within tolerance).
+(Step 2 of the recipe gave an identical pricer to step 1, since both trained
+on v4 with the same seed. Expected.)
+
+WHAT THIS MEANS FOR THE PROJECT
+  * Any FYP2 result that depends on the forecaster (E2's forgetting/walk MASE,
+    drift-trigger counts, retrain schedules) will NOT reproduce with these
+    checkpoints. The thresholds sit ~40% lower and the walk will behave
+    differently. Treat them as a new run.
+  * A written finding flips: "the base forecaster does not beat naive baselines
+    on M5" (MASE ~1.47 > 1) no longer holds. The rebuilt one beats seasonal-naive
+    (MASE 0.89). Check the report draft for that claim.
+  * E1 (sync fill rates), E4 (memory bytes) and the data-side audits do not
+    depend on the forecaster and are unaffected.
+
+DECISION FOR YOU (not made): (a) adopt the rebuilt models and re-run E2 on
+them, or (b) try to recreate v1 to recover the old forecaster. (a) is cleaner
+and the honest framing is "re-run after data loss".
+
+
+================ RAW REPORT ================
+base_v4 rebuild report - Sun, Nov 22, 2026 12:46:00 AM
+
+== training log highlights ==
+[rebuild] device=cpu results=C:\Users\MDT\Downloads\projects\fyp_continuallearning_selfdistillation\outputs\drift\results_rebuild checkpoints=C:\Users\MDT\Downloads\projects\fyp_continuallearning_selfdistillation\outputs\drift\checkpoints
+Metric val_loss improved. New best score: 0.814
+Metric val_loss improved by 0.019 >= min_delta = 0.001. New best score: 0.795
+Metric val_loss improved by 0.003 >= min_delta = 0.001. New best score: 0.792
+Monitored metric val_loss did not improve in the last 3 records. Best score: 0.792. Signaling Trainer to stop.
+  normal MASE: mu=0.8907  sigma=0.0175  (n=14)  thresholds={'k=1.5': 0.917, 
+  normal profit/window: mu=3872.45  sigma=331.49  (n=14)  
+[rebuild] step 1 done in 59.8 min -> C:\Users\MDT\Downloads\projects\fyp_continuallearning_selfdistillation\outputs\drift\checkpoints\base
+  normal profit/window: mu=3872.45  sigma=331.49  (n=14)  
+  trained in 1.1 min -> C:\Users\MDT\Downloads\projects\fyp_continuallearning_selfdistillation\outputs\drift\checkpoints\base_v4
+  rl profit reference: mu=3872.4535 sigma=331.4917 (was mu=3872.4535 sigma=331.4917)
+[rebuild] step 2 done in 1.2 min -> C:\Users\MDT\Downloads\projects\fyp_continuallearning_selfdistillation\outputs\drift\checkpoints\base_v4
+[rebuild] total 61.0 min
+EXIT 0
+
+== compare_rebuild --walk-checks 6 ==
+Loading M5 datasets...
+  RL: ignoring 1 unused column(s): unmet_demand
+  Demand CSV  : 184,412 rows x 15 cols
+  RL CSV      : 184,412 rows x 16 cols
+✓ Data loaded and cleaned
+  auto-pruned constant feature(s): region_id -> group_ids=['product_id'], 
+static_categoricals=['product_id', 'product_category']
+✓ Loaded base TFT + PPO + calibration
+Walk-forward arm='frozen' over 6 weekly checks (FC thr=0.926 @k=2.0, RL 
+floor=0.8716 @k=1.5)...
+  frozen: 0 forecasting + 1 RL triggers over 6 checks
+
+stage  metric                              old laptop         rebuild  status   source
+--------------------------------------------------------------------------------------
+prior  mu                                      -0.524          -0.524  SAME     m5/README.md
+prior  tau                                      0.313           0.313  SAME     m5/README.md
+v2     rows                                   184,412         184,412  SAME     rebuild_inventory.py docstring
+v2     items                                      100             100  SAME     build scope: CA_1, 100 items stratified
+v2     elasticity median (per item)              -0.6       -0.597761  SAME     rebuild_inventory.py docstring
+v2     items identified from own data              54              54  SAME     m5/README.md
+v2     items discarded as wrong-sign               21              21  SAME     m5/README.md
+v2     items with no price variation               25              25  SAME     m5/README.md
+v3     stockout rate                            0.051        0.051114  SAME     commit 4f7faf4 (5.1% stockout days)
+v4     corr(competitor, own price)              0.995        0.995276  SAME     commit 4f7faf4
+v4     competitor/own ratio mean                0.971        0.971022  SAME     commit 4f7faf4
+v4     competitor/own ratio std                 0.072        0.071626  SAME     commit 4f7faf4
+v4     demand_forecasting.csv == v2's       identical       identical  SAME     rebuild_inventory/refresh copy it through
+ckpt   TFT calibration MASE mu               1.480585         0.89066  DIFF     old_laptop_calibration.json (tol = 1 old sigma)
+ckpt   TFT calibration MASE sigma            0.039562        0.017452  SAME     old_laptop_calibration.json (tol = 1 old sigma)
+ckpt   drift threshold (k=2)                 1.559709        0.925565  INFO     sets when retrains fire; a shift moves every arm's schedule
+ckpt   pricer ref profit mu                  3,971.00        3,872.45  SAME     commit 4f7faf4 (relative tolerance)
+walk   frozen MASE, first 6 checks           1.469544        0.896967  DIFF     CLAUDE.md; first 6 checks of the frozen stream
+walk   frozen MASE mean (6 checks)           1.469544        0.896967  INFO     
+walk   max |per-check MASE diff|                    0        0.590627  INFO     
+walk   per-check table                                 outputs\drift\compare_rebuild_walk.csv  INFO     
+
+First divergence: [ckpt] TFT calibration MASE mu. Later stages inherit it -
+treat downstream results as a fresh run, not a reproduction.
+
+Finished Sun, Nov 22, 2026 12:48:40 AM. Shutdown scheduled 10 minutes later.

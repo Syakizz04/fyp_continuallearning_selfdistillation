@@ -1,0 +1,186 @@
+{
+  "written": "2026-11-22 11:16:38",
+  "git_head_when_written": "2bd39eefab903ce5b6cf66808af9097f4079b521",
+  "groups": {
+    "m5_raw": {
+      "dir": "data/m5_raw",
+      "built_from": [],
+      "rebuild": "m5-forecasting-accuracy.zip from github.com/KunalArora/kaggle-m5-forecasting (zip md5 4123b9f46f7c24ad237fe3b89dfc821b); see dataset_generator/m5/README.md",
+      "files": [
+        {
+          "path": "data/m5_raw/calendar.csv",
+          "bytes": 103469,
+          "sha256": "d12b5914ef03e66649adf5dd9e996e6602251c22b7a6af8f1f7e3aa12f8860f5"
+        },
+        {
+          "path": "data/m5_raw/sales_train_validation.csv",
+          "bytes": 120007726,
+          "sha256": "f368e66ed1dbecb48b2cc8fc589bf68b3deddbbb36bf5c88b4d6d0a09b9b6724"
+        },
+        {
+          "path": "data/m5_raw/sell_prices.csv",
+          "bytes": 203395785,
+          "sha256": "9da3ad1f8b8ccacdbdc70612191dd375ec24a4ac6625c24b75b3bc60b0bed2ef"
+        }
+      ]
+    },
+    "external_prior": {
+      "dir": "data/external_pricing",
+      "built_from": [],
+      "rebuild": "prior.json, re-entered by hand: mu -0.524, tau 0.313",
+      "files": [
+        {
+          "path": "data/external_pricing/prior.json",
+          "bytes": 236,
+          "sha256": "5b204adc3fbb6ce1caeef895a3b511421c9ef9d35e6a742752fc982ad3114af2"
+        }
+      ]
+    },
+    "processed_m5_v2": {
+      "dir": "data/processed_m5_v2",
+      "built_from": [
+        "m5_raw",
+        "external_prior"
+      ],
+      "rebuild": "dataset_generator.m5.build_m5 (flags in dataset_generator/m5/README.md)",
+      "files": [
+        {
+          "path": "data/processed_m5_v2/demand_forecasting.csv",
+          "bytes": 12122019,
+          "sha256": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca"
+        },
+        {
+          "path": "data/processed_m5_v2/elasticity_report.csv",
+          "bytes": 9563,
+          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+        },
+        {
+          "path": "data/processed_m5_v2/rl_environment.csv",
+          "bytes": 21063499,
+          "sha256": "e431f99f6e6d6dda241c2340a9fed1c6e638ec77b9fa313fdeb881985b46e45a"
+        }
+      ]
+    },
+    "processed_m5_v3": {
+      "dir": "data/processed_m5_v3",
+      "built_from": [
+        "processed_m5_v2"
+      ],
+      "rebuild": "dataset_generator.m5.rebuild_inventory",
+      "files": [
+        {
+          "path": "data/processed_m5_v3/demand_forecasting.csv",
+          "bytes": 12122019,
+          "sha256": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca"
+        },
+        {
+          "path": "data/processed_m5_v3/elasticity_report.csv",
+          "bytes": 9563,
+          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+        },
+        {
+          "path": "data/processed_m5_v3/rl_environment.csv",
+          "bytes": 20839119,
+          "sha256": "4f8d4fda501912f3ba06df28d324e14395493bf60c41a5a9cb0ea74c6e5fa3c9"
+        }
+      ]
+    },
+    "processed_m5_v4": {
+      "dir": "data/processed_m5_v4",
+      "built_from": [
+        "processed_m5_v3"
+      ],
+      "rebuild": "dataset_generator.m5.refresh_rl_features",
+      "files": [
+        {
+          "path": "data/processed_m5_v4/demand_forecasting.csv",
+          "bytes": 12122019,
+          "sha256": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca"
+        },
+        {
+          "path": "data/processed_m5_v4/elasticity_report.csv",
+          "bytes": 9563,
+          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+        },
+        {
+          "path": "data/processed_m5_v4/refresh_report.json",
+          "bytes": 913,
+          "sha256": "7159c37d7dad83edff047a4e9595d402ac680870fddecb722420a525e906e1f1"
+        },
+        {
+          "path": "data/processed_m5_v4/rl_environment.csv",
+          "bytes": 20797014,
+          "sha256": "5ea3c5500229996395551abcb375aad0d7310f293c1d1edea6b78704c2133051"
+        }
+      ]
+    },
+    "ckpt_base": {
+      "dir": "outputs/drift/checkpoints/base",
+      "built_from": [
+        "processed_m5_v4"
+      ],
+      "rebuild": "experiments.rebuild_base_v4 (step 1)",
+      "files": [
+        {
+          "path": "outputs/drift/checkpoints/base/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base/base_ppo.zip",
+          "bytes": 1703578,
+          "sha256": "e42edcdde2e7c83cc23e6a7f83e51ba32405bd547ab4adf3f3c316b27dfc9558"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base/base_tft.ckpt",
+          "bytes": 14474960,
+          "sha256": "3175b9ace00535871922104ea30e8ff68e20d146644e7db3844f15012b0b4283"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base/base_tft_dataset.pkl",
+          "bytes": 5539037,
+          "sha256": "faabf130cf7b911636a92c82f61b12a6b72a5776d5022eea0ff9025bc6cb529f"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base/calibration.json",
+          "bytes": 5859,
+          "sha256": "fd202f59c8b558f451ba3a82d19e8dcb9c6dd2129681062854e1c4d3c465b0d2"
+        }
+      ]
+    },
+    "ckpt_base_v4": {
+      "dir": "outputs/drift/checkpoints/base_v4",
+      "built_from": [
+        "processed_m5_v4"
+      ],
+      "rebuild": "experiments.rebuild_base_v4 (step 2: retrain_pricer)",
+      "files": [
+        {
+          "path": "outputs/drift/checkpoints/base_v4/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_v4/base_ppo.zip",
+          "bytes": 1703578,
+          "sha256": "ad767da277755d7ab8bb6e43441c6283f8c568c2fb9f26f73820114662bd3670"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_v4/base_tft.ckpt",
+          "bytes": 14474960,
+          "sha256": "3175b9ace00535871922104ea30e8ff68e20d146644e7db3844f15012b0b4283"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_v4/base_tft_dataset.pkl",
+          "bytes": 5539037,
+          "sha256": "faabf130cf7b911636a92c82f61b12a6b72a5776d5022eea0ff9025bc6cb529f"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_v4/calibration.json",
+          "bytes": 6097,
+          "sha256": "dfe863de432ebc6140e2c685511fcdc312fda7817df453536d5f4704245be0f6"
+        }
+      ]
+    }
+  }
+}
