@@ -9,8 +9,10 @@ Regenerate ONLY the inventory columns of an existing rl_environment.csv.
 Rebuilding with `build_m5 --stores CA_1 --top-n-items 100` does **not** reproduce
 the same 100 items: the run above came back with 182,557 rows against v2's
 184,412, and a visibly different elasticity distribution (median -0.79 vs -0.60).
-One item differed, and with it every elasticity that borrows strength from the
-department pool.
+(Corrected 2026-11-21: this is not one differing item. v2 was never a top-100
+build. It was `--sample-mode stratified --active-before 2012-09-01`, which
+reproduces v2 exactly; see dataset_generator/m5/README.md. The point below
+still holds.)
 
 That would wreck the experiment. The point of the new dataset is to change
 **one** thing - whether the inventory signal is realistic - so that a pricing

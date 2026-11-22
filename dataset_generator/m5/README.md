@@ -24,6 +24,40 @@ Expected files in `data/m5_raw/`:
 
 ## 2. Build
 
+### Reproducing the FYP2 dataset exactly (v2 -> v3 -> v4)
+
+These commands rebuild `data/processed_m5_v4/`, the dataset behind `base_v4` and
+E2. They were recovered on 2026-11-21 after the original files were lost, and
+`python -m experiments.compare_rebuild` confirmed every recorded number matches
+(184,412 rows; elasticity median -0.598; 54/21/25 identified/wrong-sign/no
+variation; 5.11% stockouts; competitor corr 0.995, ratio 0.971 +/- 0.072).
+
+```powershell
+# raw data: the copy originally used was m5-forecasting-accuracy.zip from
+# github.com/KunalArora/kaggle-m5-forecasting (sales_train_validation only, d_1..d_1913)
+python -m dataset_generator.m5.build_m5 --stores CA_1 --top-n-items 100 `
+    --sample-mode stratified --active-before 2012-09-01 `
+    --external-prior data/external_pricing/prior.json --out-dir data/processed_m5_v2
+python -m dataset_generator.m5.rebuild_inventory      # v2 -> v3
+python -m dataset_generator.m5.refresh_rl_features    # v3 -> v4 (competitor store TX_1)
+```
+
+The scope is **not** the top 100 items by volume. It is a volume-stratified
+sample (seed 42) of items first sold before 2012-09-01. The top-100 build
+gives 182,557 rows of high-volume staples (mean demand 12.7 units/day against
+the original's 2.38).
+
+`prior.json` is `{"mu": -0.524, "tau2": 0.097969}`, the dunnhumby fit below
+re-entered from its recorded values (rounded to 3 dp). With it, the build
+reproduces the original elasticities exactly, so the 811 MB dunnhumby download
+is not needed.
+
+On today's builder, v2 already carries the lead-time inventory, so
+`rebuild_inventory` changes nothing. Its "REFUSING" message is set off by
+CSV float round-trip noise in `demand_forecast` (~4e-15). It still writes v3.
+
+### Other builds
+
 ```powershell
 python -m dataset_generator.m5.build_m5                 # data/m5_raw -> data/processed_m5
 python -m dataset_generator.m5.build_m5 --self-test     # validate adapter on a synthetic mini-M5
