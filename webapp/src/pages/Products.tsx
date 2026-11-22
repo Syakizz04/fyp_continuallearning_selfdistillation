@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DLink } from '../components/DLink'
 import { useTo } from '../design'
-import { api, ApiError, type Product, type Recommendation } from '../api'
+import { api, ApiError, type Recommendation } from '../api'
 import { ForecastChart } from '../charts/Charts'
 import { PriceBand, SparkBars, Sparkline } from '../charts/Micro'
 import { Decide } from '../components/Decide'
@@ -10,31 +10,12 @@ import { BoundBadges, Callout, ChannelKey, Empty, ErrorBox, Metric, PageHead, Pa
 import { useApp } from '../context'
 import { ago, channelLabel, longDate, money, num, pct, shortDate, signedPct, units } from '../format'
 import { usePoll } from '../hooks'
+import { derive, LOW_COVER_DAYS, type Row } from '../stock'
 
 const PER_PAGE = 10
 
-// ── derived per-product figures ─────────────────────────────────────────────
-
-interface Row extends Product {
-  sold28: number
-  refused28: number
-  avgDaily: number
-  stockNow: number | null
-  cover: number | null          // days of stock at the recent sales rate
-  price: number | null          // live in-store price, else base
-}
-
-function derive(p: Product): Row {
-  const sold28 = p.daily.reduce((a, d) => a + d.sold, 0)
-  const refused28 = p.daily.reduce((a, d) => a + d.refused, 0)
-  const avgDaily = p.daily.length ? sold28 / p.daily.length : 0
-  const stockNow = p.true_available
-  const cover = stockNow !== null && avgDaily > 0 ? stockNow / avgDaily : null
-  const price = p.price_history.length ? p.price_history[p.price_history.length - 1].price : p.base_price
-  return { ...p, sold28, refused28, avgDaily, stockNow, cover, price }
-}
-
-const LOW_COVER_DAYS = 5
+// Per-product cover figures live in ../stock so the Overview's stock-risk
+// card and this page use the same numbers.
 
 type Filter = 'all' | 'pending' | 'low' | 'refused' | 'rule'
 type SortKey = 'sku' | 'price' | 'sold28' | 'stockNow' | 'cover' | 'pending'

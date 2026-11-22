@@ -1,4 +1,4 @@
-import { type ComponentType, type ReactNode, type SVGProps } from 'react'
+import { type ComponentType, type ReactNode, type SVGProps, useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { useAuth } from '../auth'
@@ -61,6 +61,49 @@ function OfflineBanner() {
   )
 }
 
+/** How long the current model-update hold has lasted, measured in this
+ * browser from the moment it first saw the hold. null when nothing is held. */
+function useHoldSince(waiting: string[] | undefined): number | null {
+  const key = (waiting ?? []).join(',')
+  const [since, setSince] = useState<number | null>(null)
+  const [, tick] = useState(0)
+  useEffect(() => { setSince(key ? Date.now() : null) }, [key])
+  useEffect(() => {
+    if (!key) return
+    const t = setInterval(() => tick(n => n + 1), 15000)
+    return () => clearInterval(t)
+  }, [key])
+  return since
+}
+
+const minutes = (ms: number) => {
+  const m = Math.floor(ms / 60000)
+  return m < 1 ? 'under a minute' : m === 1 ? '1 min' : `${m} min`
+}
+
+/** The clock waits for a model update before opening the next day. Shown on
+ * every page while it does, instead of a "Running" clock that never moves. */
+function RetrainBanner() {
+  const { status } = useApp()
+  const sim = status.data?.sim
+  const waiting = sim?.waiting_for ?? []
+  const since = useHoldSince(waiting)
+  if (!sim || !waiting.length) return null
+  const names = waiting.map(channelLabel).join(', ')
+  const held = sim.mode === 'playing'
+  return (
+    <div style={{ marginBottom: '1rem' }} role="status">
+      <Callout kind="warn">
+        <strong>{held ? `Holding at ${longDate(status.data?.display_date)}` : 'Model update in progress'}</strong>
+        {': '}{names} {waiting.length > 1 ? 'are' : 'is'} updating {waiting.length > 1 ? 'their models' : 'its model'}
+        {since != null && <> ({minutes(Date.now() - since)} so far)</>}.{' '}
+        {held ? 'The next trading day opens once the new model is serving; prices keep coming from the current one until then.'
+              : 'The next trading day will wait for it when you press Play.'}
+      </Callout>
+    </div>
+  )
+}
+
 function DesignSwitch() {
   const design = useDesign()
   const { pathname, search } = useLocation()
@@ -93,12 +136,12 @@ function Clock() {
       <div className="label">Trading day</div>
       <div className="clock-value" style={{ marginTop: '.2rem' }}>{longDate(s?.display_date)}</div>
       <div className="clock-meta">
-        {sim ? <>{MODE[sim.mode] ?? sim.mode} · day {Math.min(sim.tick + 1, sim.total)}/{sim.total}</> : 'simulator offline'}
+        {sim ? <>{sim.mode === 'playing' && sim.waiting_for?.length ? 'Holding' : (MODE[sim.mode] ?? sim.mode)} · day {Math.min(sim.tick + 1, sim.total)}/{sim.total}</> : 'simulator offline'}
       </div>
       {sim && !!sim.waiting_for?.length && (
         <div className="clock-meta" role="status" style={{ color: 'var(--warn)', marginTop: '.15rem' }}
           title="Model updates count as overnight work: the next trading day opens once the new model is serving">
-          Waiting for {sim.waiting_for.map(channelLabel).join(', ')} model update
+          {sim.mode === 'playing' ? 'Waiting for' : 'Updating:'} {sim.waiting_for.map(channelLabel).join(', ')} model{sim.mode === 'playing' ? ' update' : ''}
         </div>
       )}
       {sim && <div className="progress" style={{ marginTop: '.45rem' }}><span style={{ width: `${(sim.tick / Math.max(sim.total, 1)) * 100}%` }} /></div>}
@@ -172,7 +215,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="foot-block"><UserField /><DesignSwitch /></div>
         </div>
       </aside>
-      <main className="main"><div className="page"><OfflineBanner />{children}</div></main>
+      <main className="main"><div className="page"><OfflineBanner /><RetrainBanner />{children}</div></main>
     </div>
   )
 }

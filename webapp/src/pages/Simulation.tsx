@@ -57,7 +57,9 @@ export default function Simulation() {
 
   return (
     <>
-      <PageHead title="Simulation" eyebrow={<>replaying Walmart M5 sales · <span className="mono">{s.sim_date ?? '—'}</span></>} />
+      {/* One date on screen: the trading day. The M5 source date it replays is
+          a detail, so it lives in a tooltip rather than beside a second date. */}
+      <PageHead title="Simulation" eyebrow={<span title={s.sim_date ? `Replaying Walmart M5 sales from ${s.sim_date}` : undefined}>replaying Walmart M5 sales history</span>} />
 
       {s.error && <div style={{ marginBottom: '1rem' }}><Callout kind="alert"><strong>Simulator error.</strong> <span className="mono">{s.error}</span></Callout></div>}
       {settingUp && <div style={{ marginBottom: '1rem' }}><Callout kind="warn"><strong>{m.label}…</strong> reloading stock and base models on every channel. This takes about a minute.</Callout></div>}
@@ -65,8 +67,9 @@ export default function Simulation() {
       {/* ── clock ── */}
       <div className="strip" style={{ gridTemplateColumns: '1.25fr 1fr 1fr' }}>
         <div className="tile">
-          <div className="card-title"><span className="metric-label">Trading day</span><span className="right"><span className={`badge ${m.cls}`}>{m.label}</span></span></div>
-          <div className="metric-value" style={{ marginTop: '.35rem' }}>{longDate(s.display_sim_date)}</div>
+          <div className="card-title"><span className="metric-label">Trading day</span><span className="right"><span className={`badge ${m.cls}`}>{s.mode === 'playing' && s.waiting_for?.length ? 'Holding' : m.label}</span></span></div>
+          {/* Same source as the sidebar clock, so the two never disagree mid-play. */}
+          <div className="metric-value" style={{ marginTop: '.35rem' }}>{longDate(status.data?.display_date ?? s.display_sim_date)}</div>
           <div className="metric-foot mono">day {num(s.tick + 1)} of {num(s.total)} · {s.tick} traded</div>
           <div className="progress" style={{ marginTop: '.6rem' }}><span style={{ width: `${(s.tick / Math.max(s.total, 1)) * 100}%` }} /></div>
         </div>

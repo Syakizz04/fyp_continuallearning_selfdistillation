@@ -642,6 +642,11 @@ def _with_display(rows: List[Dict]) -> List[Dict]:
     g = gw()
     for r in rows:
         r["display_date"] = g.display_date(r.get("sim_date"))
+        # What is on the shelf now, so a pending price reads "from X to Y"
+        # rather than only against the base price. A decided or expired row
+        # carries what actually went on sale instead (live_price).
+        if r.get("status") == "pending" and "sku" in r:
+            r["shelf_price"] = g.shelf.get((r["sku"], r.get("channel")), r.get("base_price"))
     return rows
 
 

@@ -55,7 +55,12 @@ function Row({ it }: { it: HistoryItem }) {
     <div className="list-row">
       <div className="list-kind" style={{ ['--k' as string]: KIND[it.kind].color }}>{KIND[it.kind].label}</div>
       <div className="list-main">{main}</div>
-      <div className="list-time">{it.display_date ? shortDate(it.display_date) : ''} <span className="faint">{clockTime(it.ts)}</span></div>
+      {/* The trading day is the date that matters; the wall-clock time of the
+          action is a detail (tooltip). Showing both side by side read as two
+          clocks. Rule edits carry no trading day, so they show the time. */}
+      <div className="list-time" title={`at ${clockTime(it.ts)}`}>
+        {it.display_date ? shortDate(it.display_date) : <span className="faint">{clockTime(it.ts)}</span>}
+      </div>
     </div>
   )
 }

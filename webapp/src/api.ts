@@ -100,6 +100,8 @@ export interface Recommendation {
   inventory_view: number | null
   true_available: number | null
   forecast_p50_total: number | null
+  /** pending rows only: the price on the shelf now (gateway `shelf`) */
+  shelf_price?: number | null
   status: RecStatus
   decision: 'approve' | 'reject' | null
   decided_by: string | null

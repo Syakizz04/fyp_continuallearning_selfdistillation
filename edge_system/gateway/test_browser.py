@@ -282,7 +282,11 @@ def test_sidebar_says_when_a_model_update_holds_the_clock(browser, world):
         settle(page)
         assert "model update" not in visible_text(page)
         world.up.waiting_for = ["web"]
-        page.wait_for_selector("text=Waiting for Web store model update", timeout=6000)
+        # Wording depends on the clock: "Waiting for ... model update" while it
+        # is held mid-play, "Updating: ..." while paused (the hold only bites
+        # when Play is pressed). Either way the page-wide banner names it.
+        page.wait_for_selector("text=/Waiting for Web store model update|Updating: Web store model/", timeout=6000)
+        assert "Web store is updating its model" in visible_text(page)
     finally:
         world.up.waiting_for = []
         ctx.close()
@@ -323,7 +327,8 @@ def test_drift_warnings_page_five_at_a_time(browser, world, path):
         sign_in(page, OP, OP_PW)
         page.goto(path)
         settle(page)
-        card = page.locator(".card, section").filter(has_text="Drift warnings").filter(has=page.locator(".pager")).last
+        # v1 calls them "Model alerts" (plain language for a store manager); v2 keeps "Drift warnings".
+        card = page.locator(".card, section").filter(has_text=re.compile("Drift warnings|Model alerts")).filter(has=page.locator(".pager")).last
         pager = card.locator(".pager")
         assert "1–5 of 6" in pager.inner_text()
         rows = card.locator("tbody tr, .list-row")
