@@ -107,7 +107,25 @@ Each `*_pipeline/` directory is a self-contained package sharing a three-module 
 
 `hybrid_pipeline/` **has been removed.** It was an FYP1 drift-adaptive variant that the FYP1 writeup never used, but the whole FYP2 stack had come to import its engine from it — so the dependency ran backwards, and a `sync_config()` shim existed purely to reconcile the two packages' separate `CONFIG` dicts. Its machinery is now vendored into `drift_pipeline/trainers.py` and there is one `CONFIG`.
 
-**`drift_pipeline/trainers.py` is a deliberate byte-level copy, not a rewrite.** The base checkpoints under `outputs/drift/checkpoints/` were trained by that code, and `build_cltft` must reconstruct exactly that architecture for `base_tft.ckpt` to load. Verified behaviour-preserving: a 6-check walk returns MASE `1.469544` before and after. Treat edits to `CLTFT` / `_sdft_loss` / `training_step` as checkpoint-invalidating.
+**`drift_pipeline/trainers.py` started as a deliberate byte-level copy, not a rewrite.** The base checkpoints under `outputs/drift/checkpoints/` were trained by that code, and `build_cltft` must reconstruct exactly that architecture for `base_tft.ckpt` to load. When it was vendored, a 6-check walk returned MASE `1.469544` before and after. Treat edits to `CLTFT` / `_sdft_loss` / `training_step` as checkpoint-invalidating.
+
+It has had one deliberate change since: `make_tft_loaders` (commit c222e7b). A series that starts after the 80/20 train/val split, such as FOODS_3_321, now trains on all its rows and is kept out of val. Before, it crashed with "Unknown category". Splits where every val series is in train are unchanged. The model architecture is untouched.
+
+## The November 2026 rebuild: which numbers are current
+
+The original laptop died, and the gitignored data and checkpoints went with it.
+- **Data:** v2, v3 and v4 were rebuilt and match exactly (`dataset_generator/m5/README.md`).
+- **Models:** `base` and `base_v4` were retrained (`experiments/rebuild_base_v4.py`). The rebuilt TFT is **not** the original:
+  - calibration MASE mu 0.891 vs 1.481;
+  - 6-check frozen walk **0.8970** vs 1.469544.
+  - The original was most likely trained on the lost v1 data.
+- **The rebuilt models are the baseline now.** So:
+  - `1.469544` is retired as a regression number;
+  - every E2/E5/replicate number from August 2026 is from the old models and is not comparable;
+  - the FYP1 drift results in `outputs/drift/results/`, which the dashboard shows, also come from the original TFT;
+  - E1 is unaffected, because it runs with static prices and no models.
+- **Before trusting or reproducing a result, run `python -m experiments.artifacts --verify`.** It checks the data and checkpoints on disk against the hashes in the committed `artifacts.json`.
+- **Final result tables go in `results/`, which is committed.** `outputs/` is ignored, and that is how the E2 tables were lost.
 
 `initial_pipeline` no longer shares code with anything, so changes there need no mirroring — the old "mirror it into the other package" rule is gone with `hybrid_pipeline`.
 
