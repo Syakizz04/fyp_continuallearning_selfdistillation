@@ -1,5 +1,14 @@
+# Python 3.11. Loose ranges, for humans; the exact pins are in
+# requirements-lock-win.txt (this Windows dev box) and requirements-lock-linux.txt
+# (the Vast.ai GPU box), regenerated with:
+#   pip freeze > requirements-lock-win.txt            (from the working .venv)
+#   uv pip compile requirements.txt --python-version 3.11
+#      --python-platform x86_64-unknown-linux-gnu -o requirements-lock-linux.txt
+# avalanche-lib was removed 2026-11-22: never imported, and its proxsuite
+# dependency has no Windows wheel.
 numpy<2.0
 pandas<2.2
+pyarrow<18   # pyarrow 18+ needs numpy 2
 PyYAML
 matplotlib
 seaborn
@@ -14,4 +23,3 @@ gymnasium
 stable-baselines3[extra]
 optuna>=3.4,<5.0
 tensorboard
-avalanche-lib

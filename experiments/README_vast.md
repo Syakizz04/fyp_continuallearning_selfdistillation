@@ -57,8 +57,13 @@ cd ~/fyp && tar -xzf payload.tar.gz && rm payload.tar.gz
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-lock-linux.txt     # exact pins; same versions as the Windows box
+python -m experiments.artifacts --verify       # after the payload is unpacked: data + ckpts match
 ```
+
+`requirements-lock-linux.txt` pins the same torch, pytorch-forecasting,
+lightning and numpy as `requirements-lock-win.txt`, so a result cannot differ
+between the laptop and the GPU box because of a dependency.
 
 Most vast images ship torch already. If `pip` pulls a torch that does not match
 the image's CUDA, the preflight will catch it at the CUDA check — install the
