@@ -1,0 +1,121 @@
+strategy,event_idx,date,event,model_type,component,bytes,mb,n_items,n_units,n_tasks,bytes_cpu,bytes_gpu,note
+naive,0,,init,,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,0,,init,,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,0,,init,,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,0,,init,,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,0,,init,,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,0,,init,,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,0,,init,,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,0,,init,,process_rss,1091776512,1041.1992,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,0,,init,,torch_cuda_allocated,6371840,6.0767,0,0,0,0,0,torch-tracked current VRAM
+naive,0,,init,,torch_cuda_peak,21167616,20.187,0,0,0,0,0,torch-tracked peak VRAM
+naive,1,2013-05-07,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,1,2013-05-07,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,1,2013-05-07,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,1,2013-05-07,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,1,2013-05-07,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,1,2013-05-07,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,1,2013-05-07,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,1,2013-05-07,retrain_rl_drift,rl,process_rss,1869053952,1782.4688,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,1,2013-05-07,retrain_rl_drift,rl,torch_cuda_allocated,23968256,22.8579,0,0,0,0,0,torch-tracked current VRAM
+naive,1,2013-05-07,retrain_rl_drift,rl,torch_cuda_peak,25293824,24.1221,0,0,0,0,0,torch-tracked peak VRAM
+naive,2,2013-09-24,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,2,2013-09-24,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,2,2013-09-24,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,2,2013-09-24,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,2,2013-09-24,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,2,2013-09-24,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,2,2013-09-24,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,2,2013-09-24,retrain_rl_drift,rl,process_rss,1881841664,1794.6641,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,2,2013-09-24,retrain_rl_drift,rl,torch_cuda_allocated,23968256,22.8579,0,0,0,0,0,torch-tracked current VRAM
+naive,2,2013-09-24,retrain_rl_drift,rl,torch_cuda_peak,25293824,24.1221,0,0,0,0,0,torch-tracked peak VRAM
+naive,3,2013-11-19,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,3,2013-11-19,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,3,2013-11-19,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,3,2013-11-19,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,3,2013-11-19,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,3,2013-11-19,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,3,2013-11-19,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,3,2013-11-19,retrain_rl_drift,rl,process_rss,1882615808,1795.4023,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,3,2013-11-19,retrain_rl_drift,rl,torch_cuda_allocated,23968256,22.8579,0,0,0,0,0,torch-tracked current VRAM
+naive,3,2013-11-19,retrain_rl_drift,rl,torch_cuda_peak,25293824,24.1221,0,0,0,0,0,torch-tracked peak VRAM
+naive,4,2013-12-10,retrain_fc_drift,forecasting,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,4,2013-12-10,retrain_fc_drift,forecasting,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,4,2013-12-10,retrain_fc_drift,forecasting,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,4,2013-12-10,retrain_fc_drift,forecasting,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,4,2013-12-10,retrain_fc_drift,forecasting,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,4,2013-12-10,retrain_fc_drift,forecasting,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,4,2013-12-10,retrain_fc_drift,forecasting,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,4,2013-12-10,retrain_fc_drift,forecasting,process_rss,1965867008,1874.7969,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,4,2013-12-10,retrain_fc_drift,forecasting,torch_cuda_allocated,2247680,2.1436,0,0,0,0,0,torch-tracked current VRAM
+naive,4,2013-12-10,retrain_fc_drift,forecasting,torch_cuda_peak,1293489152,1233.5674,0,0,0,0,0,torch-tracked peak VRAM
+naive,5,2013-12-24,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,5,2013-12-24,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,5,2013-12-24,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,5,2013-12-24,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,5,2013-12-24,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,5,2013-12-24,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,5,2013-12-24,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,5,2013-12-24,retrain_rl_drift,rl,process_rss,2062254080,1966.7188,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,5,2013-12-24,retrain_rl_drift,rl,torch_cuda_allocated,19293696,18.3999,0,0,0,0,0,torch-tracked current VRAM
+naive,5,2013-12-24,retrain_rl_drift,rl,torch_cuda_peak,20619264,19.6641,0,0,0,0,0,torch-tracked peak VRAM
+naive,6,2014-01-07,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,6,2014-01-07,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,6,2014-01-07,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,6,2014-01-07,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,6,2014-01-07,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,6,2014-01-07,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,6,2014-01-07,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,6,2014-01-07,retrain_rl_drift,rl,process_rss,2089283584,1992.4961,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,6,2014-01-07,retrain_rl_drift,rl,torch_cuda_allocated,19293696,18.3999,0,0,0,0,0,torch-tracked current VRAM
+naive,6,2014-01-07,retrain_rl_drift,rl,torch_cuda_peak,20619264,19.6641,0,0,0,0,0,torch-tracked peak VRAM
+naive,7,2014-01-21,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,7,2014-01-21,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,7,2014-01-21,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,7,2014-01-21,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,7,2014-01-21,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,7,2014-01-21,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,7,2014-01-21,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,7,2014-01-21,retrain_rl_drift,rl,process_rss,2066546688,1970.8125,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,7,2014-01-21,retrain_rl_drift,rl,torch_cuda_allocated,19293696,18.3999,0,0,0,0,0,torch-tracked current VRAM
+naive,7,2014-01-21,retrain_rl_drift,rl,torch_cuda_peak,20619264,19.6641,0,0,0,0,0,torch-tracked peak VRAM
+naive,8,2014-02-04,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,8,2014-02-04,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,8,2014-02-04,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,8,2014-02-04,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,8,2014-02-04,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,8,2014-02-04,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,8,2014-02-04,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,8,2014-02-04,retrain_rl_drift,rl,process_rss,2093830144,1996.832,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,8,2014-02-04,retrain_rl_drift,rl,torch_cuda_allocated,19293696,18.3999,0,0,0,0,0,torch-tracked current VRAM
+naive,8,2014-02-04,retrain_rl_drift,rl,torch_cuda_peak,20619264,19.6641,0,0,0,0,0,torch-tracked peak VRAM
+naive,9,2014-02-18,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,9,2014-02-18,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,9,2014-02-18,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,9,2014-02-18,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,9,2014-02-18,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,9,2014-02-18,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,9,2014-02-18,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,9,2014-02-18,retrain_rl_drift,rl,process_rss,2062368768,1966.8281,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,9,2014-02-18,retrain_rl_drift,rl,torch_cuda_allocated,19293696,18.3999,0,0,0,0,0,torch-tracked current VRAM
+naive,9,2014-02-18,retrain_rl_drift,rl,torch_cuda_peak,20619264,19.6641,0,0,0,0,0,torch-tracked peak VRAM
+naive,10,2014-03-04,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,10,2014-03-04,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,10,2014-03-04,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,10,2014-03-04,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,10,2014-03-04,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,10,2014-03-04,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,10,2014-03-04,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,10,2014-03-04,retrain_rl_drift,rl,process_rss,2062389248,1966.8477,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,10,2014-03-04,retrain_rl_drift,rl,torch_cuda_allocated,19293696,18.3999,0,0,0,0,0,torch-tracked current VRAM
+naive,10,2014-03-04,retrain_rl_drift,rl,torch_cuda_peak,20619264,19.6641,0,0,0,0,0,torch-tracked peak VRAM
+naive,11,2014-03-25,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+naive,11,2014-03-25,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+naive,11,2014-03-25,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+naive,11,2014-03-25,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+naive,11,2014-03-25,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+naive,11,2014-03-25,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+naive,11,2014-03-25,retrain_rl_drift,rl,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+naive,11,2014-03-25,retrain_rl_drift,rl,process_rss,2062454784,1966.9102,0,0,0,0,0,outer bound: includes data and CUDA context
+naive,11,2014-03-25,retrain_rl_drift,rl,torch_cuda_allocated,19293696,18.3999,0,0,0,0,0,torch-tracked current VRAM
+naive,11,2014-03-25,retrain_rl_drift,rl,torch_cuda_peak,20619264,19.6641,0,0,0,0,0,torch-tracked peak VRAM

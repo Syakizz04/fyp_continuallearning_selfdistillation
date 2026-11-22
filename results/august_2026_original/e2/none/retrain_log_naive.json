@@ -1,0 +1,93 @@
+{
+  "strategy": "naive",
+  "n_fc_retrains": 1,
+  "n_rl_retrains": 11,
+  "fc_epochs_total": 5,
+  "rl_steps_total": 165000,
+  "events": [
+    {
+      "date": "2013-05-07",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2013-12-10",
+      "model": "forecasting",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 11700
+    },
+    {
+      "date": "2013-12-24",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-01-07",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-01-21",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-02-04",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-02-18",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-03-04",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-03-25",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-04-22",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-08-19",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2015-07-21",
+      "model": "rl",
+      "strategy": "naive",
+      "reason": "drift",
+      "window_rows": 5700
+    }
+  ]
+}

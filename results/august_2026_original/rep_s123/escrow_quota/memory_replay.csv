@@ -1,0 +1,91 @@
+strategy,event_idx,date,event,model_type,component,bytes,mb,n_items,n_units,n_tasks,bytes_cpu,bytes_gpu,note
+replay,0,,init,,fc_replay,0,0.0,0,0,0,0,0,empty
+replay,0,,init,,rl_replay,0,0.0,0,0,0,0,0,empty
+replay,0,,init,,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,0,,init,,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,0,,init,,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,0,,init,,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,0,,init,,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,0,,init,,process_rss,1091674112,1041.1016,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,0,,init,,torch_cuda_allocated,6371840,6.0767,0,0,0,0,0,torch-tracked current VRAM
+replay,0,,init,,torch_cuda_peak,21167616,20.187,0,0,0,0,0,torch-tracked peak VRAM
+replay,1,2013-05-07,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+replay,1,2013-05-07,retrain_rl_drift,rl,rl_replay,1920000,1.8311,20000,20000,2,1920000,0,capacity=20000 transitions; binding=True
+replay,1,2013-05-07,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,1,2013-05-07,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,1,2013-05-07,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,1,2013-05-07,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,1,2013-05-07,retrain_rl_drift,rl,cl_state_total,1440000,1.3733,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,1,2013-05-07,retrain_rl_drift,rl,process_rss,1891123200,1803.5156,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,1,2013-05-07,retrain_rl_drift,rl,torch_cuda_allocated,23963136,22.853,0,0,0,0,0,torch-tracked current VRAM
+replay,1,2013-05-07,retrain_rl_drift,rl,torch_cuda_peak,26105344,24.896,0,0,0,0,0,torch-tracked peak VRAM
+replay,2,2013-12-10,retrain_fc_drift,forecasting,fc_replay,455884800,434.7656,280,71680,2,455884800,0,capacity=2000 entries; binding=False
+replay,2,2013-12-10,retrain_fc_drift,forecasting,rl_replay,1920000,1.8311,20000,20000,2,1920000,0,capacity=20000 transitions; binding=True
+replay,2,2013-12-10,retrain_fc_drift,forecasting,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,2,2013-12-10,retrain_fc_drift,forecasting,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,2,2013-12-10,retrain_fc_drift,forecasting,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,2,2013-12-10,retrain_fc_drift,forecasting,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,2,2013-12-10,retrain_fc_drift,forecasting,cl_state_total,457324800,436.1389,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,2,2013-12-10,retrain_fc_drift,forecasting,process_rss,2455568384,2341.8125,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,2,2013-12-10,retrain_fc_drift,forecasting,torch_cuda_allocated,2247680,2.1436,0,0,0,0,0,torch-tracked current VRAM
+replay,2,2013-12-10,retrain_fc_drift,forecasting,torch_cuda_peak,1301641728,1241.3423,0,0,0,0,0,torch-tracked peak VRAM
+replay,3,2013-12-24,retrain_rl_drift,rl,fc_replay,455884800,434.7656,280,71680,2,455884800,0,capacity=2000 entries; binding=False
+replay,3,2013-12-24,retrain_rl_drift,rl,rl_replay,1919808,1.8309,19998,19998,3,1919808,0,capacity=20000 transitions; binding=False
+replay,3,2013-12-24,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,3,2013-12-24,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,3,2013-12-24,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,3,2013-12-24,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,3,2013-12-24,retrain_rl_drift,rl,cl_state_total,457324656,436.1388,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,3,2013-12-24,retrain_rl_drift,rl,process_rss,2528841728,2411.6914,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,3,2013-12-24,retrain_rl_drift,rl,torch_cuda_allocated,19288576,18.395,0,0,0,0,0,torch-tracked current VRAM
+replay,3,2013-12-24,retrain_rl_drift,rl,torch_cuda_peak,21430784,20.438,0,0,0,0,0,torch-tracked peak VRAM
+replay,4,2014-01-07,retrain_rl_drift,rl,fc_replay,455884800,434.7656,280,71680,2,455884800,0,capacity=2000 entries; binding=False
+replay,4,2014-01-07,retrain_rl_drift,rl,rl_replay,1920000,1.8311,20000,20000,4,1920000,0,capacity=20000 transitions; binding=True
+replay,4,2014-01-07,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,4,2014-01-07,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,4,2014-01-07,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,4,2014-01-07,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,4,2014-01-07,retrain_rl_drift,rl,cl_state_total,457324800,436.1389,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,4,2014-01-07,retrain_rl_drift,rl,process_rss,2665500672,2542.0195,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,4,2014-01-07,retrain_rl_drift,rl,torch_cuda_allocated,19288576,18.395,0,0,0,0,0,torch-tracked current VRAM
+replay,4,2014-01-07,retrain_rl_drift,rl,torch_cuda_peak,21430784,20.438,0,0,0,0,0,torch-tracked peak VRAM
+replay,5,2014-01-21,retrain_rl_drift,rl,fc_replay,455884800,434.7656,280,71680,2,455884800,0,capacity=2000 entries; binding=False
+replay,5,2014-01-21,retrain_rl_drift,rl,rl_replay,1920000,1.8311,20000,20000,5,1920000,0,capacity=20000 transitions; binding=True
+replay,5,2014-01-21,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,5,2014-01-21,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,5,2014-01-21,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,5,2014-01-21,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,5,2014-01-21,retrain_rl_drift,rl,cl_state_total,457324800,436.1389,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,5,2014-01-21,retrain_rl_drift,rl,process_rss,2545917952,2427.9766,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,5,2014-01-21,retrain_rl_drift,rl,torch_cuda_allocated,19290112,18.3965,0,0,0,0,0,torch-tracked current VRAM
+replay,5,2014-01-21,retrain_rl_drift,rl,torch_cuda_peak,21432320,20.4395,0,0,0,0,0,torch-tracked peak VRAM
+replay,6,2014-02-04,retrain_rl_drift,rl,fc_replay,455884800,434.7656,280,71680,2,455884800,0,capacity=2000 entries; binding=False
+replay,6,2014-02-04,retrain_rl_drift,rl,rl_replay,1919808,1.8309,19998,19998,6,1919808,0,capacity=20000 transitions; binding=False
+replay,6,2014-02-04,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,6,2014-02-04,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,6,2014-02-04,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,6,2014-02-04,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,6,2014-02-04,retrain_rl_drift,rl,cl_state_total,457324656,436.1388,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,6,2014-02-04,retrain_rl_drift,rl,process_rss,2549788672,2431.668,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,6,2014-02-04,retrain_rl_drift,rl,torch_cuda_allocated,19291648,18.3979,0,0,0,0,0,torch-tracked current VRAM
+replay,6,2014-02-04,retrain_rl_drift,rl,torch_cuda_peak,21433856,20.4409,0,0,0,0,0,torch-tracked peak VRAM
+replay,7,2014-02-18,retrain_rl_drift,rl,fc_replay,455884800,434.7656,280,71680,2,455884800,0,capacity=2000 entries; binding=False
+replay,7,2014-02-18,retrain_rl_drift,rl,rl_replay,1919904,1.831,19999,19999,7,1919904,0,capacity=20000 transitions; binding=False
+replay,7,2014-02-18,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,7,2014-02-18,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,7,2014-02-18,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,7,2014-02-18,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,7,2014-02-18,retrain_rl_drift,rl,cl_state_total,457324728,436.1388,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,7,2014-02-18,retrain_rl_drift,rl,process_rss,2528927744,2411.7734,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,7,2014-02-18,retrain_rl_drift,rl,torch_cuda_allocated,19288576,18.395,0,0,0,0,0,torch-tracked current VRAM
+replay,7,2014-02-18,retrain_rl_drift,rl,torch_cuda_peak,21430784,20.438,0,0,0,0,0,torch-tracked peak VRAM
+replay,8,2014-03-04,retrain_rl_drift,rl,fc_replay,455884800,434.7656,280,71680,2,455884800,0,capacity=2000 entries; binding=False
+replay,8,2014-03-04,retrain_rl_drift,rl,rl_replay,1920000,1.8311,20000,20000,8,1920000,0,capacity=20000 transitions; binding=True
+replay,8,2014-03-04,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+replay,8,2014-03-04,retrain_rl_drift,rl,rl_teacher,0,0.0,0,0,0,0,0,empty
+replay,8,2014-03-04,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+replay,8,2014-03-04,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+replay,8,2014-03-04,retrain_rl_drift,rl,cl_state_total,457324800,436.1389,0,0,0,0,0,"all CL structures, storage-deduped"
+replay,8,2014-03-04,retrain_rl_drift,rl,process_rss,2652069888,2529.2109,0,0,0,0,0,outer bound: includes data and CUDA context
+replay,8,2014-03-04,retrain_rl_drift,rl,torch_cuda_allocated,19290112,18.3965,0,0,0,0,0,torch-tracked current VRAM
+replay,8,2014-03-04,retrain_rl_drift,rl,torch_cuda_peak,21432320,20.4395,0,0,0,0,0,torch-tracked peak VRAM

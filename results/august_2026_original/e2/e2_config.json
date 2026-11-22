@@ -1,0 +1,67 @@
+{
+  "censoring": [
+    "none",
+    "strong_lock",
+    "escrow_quota"
+  ],
+  "arms": [
+    "frozen",
+    "naive",
+    "replay",
+    "sdft"
+  ],
+  "scarcity_power": 1.0,
+  "seed": 42,
+  "data_dir": "/workspace/fyp/data/processed_m5_v4",
+  "base_ckpt": "/workspace/fyp/outputs/drift/checkpoints/base_v4",
+  "reports": {
+    "none": {
+      "spec": "none",
+      "mode": "none",
+      "n_rows": 184412,
+      "units_true": 439535.0,
+      "units_observed": 439535.0,
+      "units_censored": 0.0,
+      "censored_share": 0.0,
+      "fill_rate": 1.0,
+      "fill_rate_requested": null,
+      "target_reachable": true,
+      "rows_affected": 0,
+      "rows_affected_share": 0.0,
+      "mean_relative_bias": 0.0,
+      "max_row_censored": 0.0
+    },
+    "strong_lock": {
+      "spec": "policy@0.827",
+      "mode": "policy",
+      "n_rows": 184412,
+      "units_true": 439535.0,
+      "units_observed": 363495.445,
+      "units_censored": 76039.55499999996,
+      "censored_share": 0.17299999999999993,
+      "fill_rate": 0.8270000000000001,
+      "fill_rate_requested": 0.827,
+      "target_reachable": true,
+      "rows_affected": 98972,
+      "rows_affected_share": 0.5366895863609743,
+      "mean_relative_bias": 0.23235695794352407,
+      "max_row_censored": 90.0
+    },
+    "escrow_quota": {
+      "spec": "policy@0.717",
+      "mode": "policy",
+      "n_rows": 184412,
+      "units_true": 439535.0,
+      "units_observed": 315146.595,
+      "units_censored": 124388.405,
+      "censored_share": 0.283,
+      "fill_rate": 0.717,
+      "fill_rate_requested": 0.717,
+      "target_reachable": true,
+      "rows_affected": 98972,
+      "rows_affected_share": 0.5366895863609743,
+      "mean_relative_bias": 0.41457965244866085,
+      "max_row_censored": 90.0
+    }
+  }
+}

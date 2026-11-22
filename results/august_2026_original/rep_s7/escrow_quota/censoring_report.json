@@ -1,0 +1,18 @@
+{
+  "spec": "policy@0.717",
+  "mode": "policy",
+  "n_rows": 184412,
+  "units_true": 439535.0,
+  "units_observed": 315146.595,
+  "units_censored": 124388.405,
+  "censored_share": 0.283,
+  "fill_rate": 0.717,
+  "fill_rate_requested": 0.717,
+  "target_reachable": true,
+  "rows_affected": 98972,
+  "rows_affected_share": 0.5366895863609743,
+  "mean_relative_bias": 0.41457965244866085,
+  "max_row_censored": 90.0,
+  "scarcity_power": 1.0,
+  "seed": 7
+}

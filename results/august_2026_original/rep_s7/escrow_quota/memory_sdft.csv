@@ -1,0 +1,91 @@
+strategy,event_idx,date,event,model_type,component,bytes,mb,n_items,n_units,n_tasks,bytes_cpu,bytes_gpu,note
+sdft,0,,init,,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,0,,init,,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,0,,init,,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,0,,init,,rl_teacher,0,0.0,0,0,0,0,0,empty
+sdft,0,,init,,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,0,,init,,fc_teacher,0,0.0,0,0,0,0,0,empty
+sdft,0,,init,,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,0,,init,,process_rss,1091330048,1040.7734,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,0,,init,,torch_cuda_allocated,6371840,6.0767,0,0,0,0,0,torch-tracked current VRAM
+sdft,0,,init,,torch_cuda_peak,21167616,20.187,0,0,0,0,0,torch-tracked peak VRAM
+sdft,1,2013-05-07,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,1,2013-05-07,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,1,2013-05-07,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,1,2013-05-07,retrain_rl_drift,rl,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,1,2013-05-07,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,1,2013-05-07,retrain_rl_drift,rl,fc_teacher,0,0.0,0,0,0,0,0,empty
+sdft,1,2013-05-07,retrain_rl_drift,rl,cl_state_total,559152,0.5332,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,1,2013-05-07,retrain_rl_drift,rl,process_rss,1866850304,1780.3672,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,1,2013-05-07,retrain_rl_drift,rl,torch_cuda_allocated,25657856,24.4692,0,0,0,0,0,torch-tracked current VRAM
+sdft,1,2013-05-07,retrain_rl_drift,rl,torch_cuda_peak,26983424,25.7334,0,0,0,0,0,torch-tracked peak VRAM
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,fc_teacher,4611980,4.3983,1,1152995,0,4611980,0,one frozen TFT copy (constant in stream length)
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,cl_state_total,5171132,4.9316,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,process_rss,1989918720,1897.7344,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,torch_cuda_allocated,3937280,3.7549,0,0,0,0,0,torch-tracked current VRAM
+sdft,2,2013-12-10,retrain_fc_drift,forecasting,torch_cuda_peak,2513493504,2397.0542,0,0,0,0,0,torch-tracked peak VRAM
+sdft,3,2013-12-24,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,3,2013-12-24,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,3,2013-12-24,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,3,2013-12-24,retrain_rl_drift,rl,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,3,2013-12-24,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,3,2013-12-24,retrain_rl_drift,rl,fc_teacher,4611980,4.3983,1,1152995,0,4611980,0,one frozen TFT copy (constant in stream length)
+sdft,3,2013-12-24,retrain_rl_drift,rl,cl_state_total,5171132,4.9316,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,3,2013-12-24,retrain_rl_drift,rl,process_rss,2105679872,2008.1328,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,3,2013-12-24,retrain_rl_drift,rl,torch_cuda_allocated,20983296,20.0112,0,0,0,0,0,torch-tracked current VRAM
+sdft,3,2013-12-24,retrain_rl_drift,rl,torch_cuda_peak,22308864,21.2754,0,0,0,0,0,torch-tracked peak VRAM
+sdft,4,2014-01-07,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,4,2014-01-07,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,4,2014-01-07,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,4,2014-01-07,retrain_rl_drift,rl,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,4,2014-01-07,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,4,2014-01-07,retrain_rl_drift,rl,fc_teacher,4611980,4.3983,1,1152995,0,4611980,0,one frozen TFT copy (constant in stream length)
+sdft,4,2014-01-07,retrain_rl_drift,rl,cl_state_total,5171132,4.9316,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,4,2014-01-07,retrain_rl_drift,rl,process_rss,2114740224,2016.7734,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,4,2014-01-07,retrain_rl_drift,rl,torch_cuda_allocated,20983296,20.0112,0,0,0,0,0,torch-tracked current VRAM
+sdft,4,2014-01-07,retrain_rl_drift,rl,torch_cuda_peak,22664704,21.6147,0,0,0,0,0,torch-tracked peak VRAM
+sdft,5,2014-01-21,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,5,2014-01-21,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,5,2014-01-21,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,5,2014-01-21,retrain_rl_drift,rl,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,5,2014-01-21,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,5,2014-01-21,retrain_rl_drift,rl,fc_teacher,4611980,4.3983,1,1152995,0,4611980,0,one frozen TFT copy (constant in stream length)
+sdft,5,2014-01-21,retrain_rl_drift,rl,cl_state_total,5171132,4.9316,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,5,2014-01-21,retrain_rl_drift,rl,process_rss,2114760704,2016.793,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,5,2014-01-21,retrain_rl_drift,rl,torch_cuda_allocated,20983296,20.0112,0,0,0,0,0,torch-tracked current VRAM
+sdft,5,2014-01-21,retrain_rl_drift,rl,torch_cuda_peak,22664704,21.6147,0,0,0,0,0,torch-tracked peak VRAM
+sdft,6,2014-02-04,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,6,2014-02-04,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,6,2014-02-04,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,6,2014-02-04,retrain_rl_drift,rl,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,6,2014-02-04,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,6,2014-02-04,retrain_rl_drift,rl,fc_teacher,4611980,4.3983,1,1152995,0,4611980,0,one frozen TFT copy (constant in stream length)
+sdft,6,2014-02-04,retrain_rl_drift,rl,cl_state_total,5171132,4.9316,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,6,2014-02-04,retrain_rl_drift,rl,process_rss,2157744128,2057.7852,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,6,2014-02-04,retrain_rl_drift,rl,torch_cuda_allocated,20983296,20.0112,0,0,0,0,0,torch-tracked current VRAM
+sdft,6,2014-02-04,retrain_rl_drift,rl,torch_cuda_peak,22664704,21.6147,0,0,0,0,0,torch-tracked peak VRAM
+sdft,7,2014-02-18,retrain_rl_drift,rl,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,7,2014-02-18,retrain_rl_drift,rl,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,7,2014-02-18,retrain_rl_drift,rl,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,7,2014-02-18,retrain_rl_drift,rl,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,7,2014-02-18,retrain_rl_drift,rl,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,7,2014-02-18,retrain_rl_drift,rl,fc_teacher,4611980,4.3983,1,1152995,0,4611980,0,one frozen TFT copy (constant in stream length)
+sdft,7,2014-02-18,retrain_rl_drift,rl,cl_state_total,5171132,4.9316,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,7,2014-02-18,retrain_rl_drift,rl,process_rss,2199846912,2097.9375,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,7,2014-02-18,retrain_rl_drift,rl,torch_cuda_allocated,20983296,20.0112,0,0,0,0,0,torch-tracked current VRAM
+sdft,7,2014-02-18,retrain_rl_drift,rl,torch_cuda_peak,22664704,21.6147,0,0,0,0,0,torch-tracked peak VRAM
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,fc_replay,0,0.0,0,0,0,0,0,empty
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,rl_replay,0,0.0,0,0,0,0,0,empty
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,rl_ewc,0,0.0,0,0,0,0,0,empty
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,rl_teacher,559152,0.5332,1,139788,0,0,559152,one frozen policy copy (constant in stream length)
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,fc_ewc,0,0.0,0,0,0,0,0,empty
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,fc_teacher,4611980,4.3983,1,1152995,0,4611980,0,one frozen TFT copy (constant in stream length)
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,cl_state_total,5171132,4.9316,0,0,0,0,0,"all CL structures, storage-deduped"
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,process_rss,2216607744,2113.9219,0,0,0,0,0,outer bound: includes data and CUDA context
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,torch_cuda_allocated,3937280,3.7549,0,0,0,0,0,torch-tracked current VRAM
+sdft,8,2014-12-09,retrain_fc_drift,forecasting,torch_cuda_peak,2512273408,2395.8906,0,0,0,0,0,torch-tracked peak VRAM

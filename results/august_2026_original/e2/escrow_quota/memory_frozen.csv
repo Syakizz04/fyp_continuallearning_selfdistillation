@@ -1,0 +1,11 @@
+strategy,event_idx,date,event,model_type,component,bytes,mb,n_items,n_units,n_tasks,bytes_cpu,bytes_gpu,note
+frozen,0,,init,,fc_replay,0,0.0,0,0,0,0,0,empty
+frozen,0,,init,,rl_replay,0,0.0,0,0,0,0,0,empty
+frozen,0,,init,,rl_ewc,0,0.0,0,0,0,0,0,empty
+frozen,0,,init,,rl_teacher,0,0.0,0,0,0,0,0,empty
+frozen,0,,init,,fc_ewc,0,0.0,0,0,0,0,0,empty
+frozen,0,,init,,fc_teacher,0,0.0,0,0,0,0,0,empty
+frozen,0,,init,,cl_state_total,0,0.0,0,0,0,0,0,"all CL structures, storage-deduped"
+frozen,0,,init,,process_rss,1097101312,1046.2773,0,0,0,0,0,outer bound: includes data and CUDA context
+frozen,0,,init,,torch_cuda_allocated,6371840,6.0767,0,0,0,0,0,torch-tracked current VRAM
+frozen,0,,init,,torch_cuda_peak,21167616,20.187,0,0,0,0,0,torch-tracked peak VRAM

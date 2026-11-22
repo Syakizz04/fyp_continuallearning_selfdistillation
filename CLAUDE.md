@@ -118,10 +118,16 @@ The original laptop died, and the gitignored data and checkpoints went with it.
 - **Models:** `base` and `base_v4` were retrained (`experiments/rebuild_base_v4.py`). The rebuilt TFT is **not** the original:
   - calibration MASE mu 0.891 vs 1.481;
   - 6-check frozen walk **0.8970** vs 1.469544.
-  - The original was most likely trained on the lost v1 data.
+  - **The originals were recovered** on 2026-11-22 (`experiments/laptop_transfer.py`).
+    They are in `outputs/drift/checkpoints/original/`, and their August tables are in `results/august_2026_original/`.
+  - The "trained on lost v1 data" theory is **wrong**:
+    - v1's `demand_forecasting.csv` is byte-identical to v4's;
+    - the base_meta config is identical;
+    - run on today's code, the original scores 1.469542 on the 6-check walk (recorded: 1.469544).
+    So the pipeline reproduces, and the original *training run* simply produced worse weights.
 - **The rebuilt models are the baseline now.** So:
   - `1.469544` is retired as a regression number;
-  - every E2/E5/replicate number from August 2026 is from the old models and is not comparable;
+  - every E2/E5/replicate number from August 2026 is from the old models and is not comparable with a rebuilt-model run (they are recovered, in `results/august_2026_original/`);
   - the FYP1 drift results in `outputs/drift/results/`, which the dashboard shows, also come from the original TFT;
   - E1 is unaffected, because it runs with static prices and no models.
 - **Before trusting or reproducing a result, run `python -m experiments.artifacts --verify`.** It checks the data and checkpoints on disk against the hashes in the committed `artifacts.json`.

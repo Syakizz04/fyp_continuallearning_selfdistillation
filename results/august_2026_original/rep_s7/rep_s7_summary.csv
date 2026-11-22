@@ -1,0 +1,5 @@
+censoring,fill_rate,censored_share,arm,forgetting_mase_base_era,adaptation_mase_walk_era,walk_mase_mean,walk_mase_median,walk_smape_mean,profit_index_vs_frozen,n_fc_retrains,n_rl_retrains,fc_epochs_total,rl_steps_total
+escrow_quota,0.717,0.283,frozen,0.0,0.0,1.4744603968228565,,,1.0,0.0,0.0,0.0,0.0
+escrow_quota,0.717,0.283,naive,0.0535590504969618,0.6947694703236311,1.0147286298994256,,,1.035169446911267,1.0,9.0,5.0,135000.0
+escrow_quota,0.717,0.283,replay,-0.087870296655576,0.7076771735573172,1.0017113882047133,,,1.042690136281363,1.0,13.0,5.0,195000.0
+escrow_quota,0.717,0.283,sdft,0.0782177017065269,0.1098068775071883,1.4025874718728688,,,1.100680853348045,2.0,6.0,10.0,90000.0

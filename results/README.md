@@ -17,6 +17,7 @@ The rule:
 | `synthetic_audit/` | Honesty audit of the synthetic layer: conservation holds; elasticity is 71% prior and 29% data | step `audit` | none (data v3) |
 | `e4_memory/` | E4 static memory: a full replay buffer is 3105 MB vs the SDFT teacher's 4.4 MB (706x) | step `e4` | rebuilt `base_v4` (same architecture as the original, so same bytes) |
 | `forecast_signal/` | TFT h=0 vs 28-day rolling mean as the pricer's demand signal: MAE 1.539 vs 1.489 | `python -m experiments.forecast_signal_check` | rebuilt `base_v4` |
+| `august_2026_original/` | The lost August 2026 FYP2 tables, recovered from the old laptop: E2 at none / strong_lock / escrow_quota (single seed), the 3-seed escrow_quota replicates (7, 42, 123) and E5. Result tables only; the E5 model weights are not included | `exp_staleness_cl`, `run_replicates.sh`, `exp_sdft_alpha`, run in August | **original** `base_v4` (calibration MASE 1.481). Today's code reproduces its 6-check walk to 2e-6 |
 | `critic_compare/` | Pricing drift signals (revenue, critic and markup baseline) under 6 fault types, 17 non-overlapping trials, plus false alarms over 2013-2015 | `python -m experiments.critic_compare` (v2) | rebuilt `base_v4` |
 
 The FYP1 drift-walk results predate this rule. They live in

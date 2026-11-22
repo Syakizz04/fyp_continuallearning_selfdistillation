@@ -1,0 +1,3 @@
+arm,n_fc_retrains,n_rl_retrains,n_retrains_total,fc_epochs_total,rl_steps_total,walk_mase_mean,profit_index_vs_frozen,forgetting_mase_base_era,forgetting_profit_base_era,adaptation_mase_walk_era
+frozen,0,0,0,0,0,1.4744521187121875,1.0,0.0,0.0,0.0
+sdft,1,10,11,5,150000,1.0660086691955022,1.0418644835886117,0.012748941779519922,0.01206972955438045,0.6326843593907718

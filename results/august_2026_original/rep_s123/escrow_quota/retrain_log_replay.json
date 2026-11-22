@@ -1,0 +1,65 @@
+{
+  "strategy": "replay",
+  "n_fc_retrains": 1,
+  "n_rl_retrains": 7,
+  "fc_epochs_total": 5,
+  "rl_steps_total": 105000,
+  "events": [
+    {
+      "date": "2013-05-07",
+      "model": "rl",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2013-12-10",
+      "model": "forecasting",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 11700
+    },
+    {
+      "date": "2013-12-24",
+      "model": "rl",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-01-07",
+      "model": "rl",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-01-21",
+      "model": "rl",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-02-04",
+      "model": "rl",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-02-18",
+      "model": "rl",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 5700
+    },
+    {
+      "date": "2014-03-04",
+      "model": "rl",
+      "strategy": "replay",
+      "reason": "drift",
+      "window_rows": 5700
+    }
+  ]
+}

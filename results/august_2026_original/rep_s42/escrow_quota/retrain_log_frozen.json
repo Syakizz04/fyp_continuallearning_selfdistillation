@@ -1,0 +1,8 @@
+{
+  "strategy": "frozen",
+  "n_fc_retrains": 0,
+  "n_rl_retrains": 0,
+  "fc_epochs_total": 0,
+  "rl_steps_total": 0,
+  "events": []
+}

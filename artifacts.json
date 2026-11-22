@@ -1,6 +1,6 @@
 {
-  "written": "2026-11-22 11:16:38",
-  "git_head_when_written": "2bd39eefab903ce5b6cf66808af9097f4079b521",
+  "written": "2026-11-22 14:04:38",
+  "git_head_when_written": "ec6f6504777e4090262cc1c2e80cd88c7b467f94",
   "groups": {
     "m5_raw": {
       "dir": "data/m5_raw",
@@ -179,6 +179,135 @@
           "path": "outputs/drift/checkpoints/base_v4/calibration.json",
           "bytes": 6097,
           "sha256": "dfe863de432ebc6140e2c685511fcdc312fda7817df453536d5f4704245be0f6"
+        }
+      ]
+    },
+    "ckpt_original": {
+      "dir": "outputs/drift/checkpoints/original",
+      "built_from": [
+        "processed_m5_v4"
+      ],
+      "rebuild": "not rebuildable; recovered from the old laptop (recovered/old_laptop/_manifest.json has the hashes)",
+      "files": [
+        {
+          "path": "outputs/drift/checkpoints/original/base/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base/base_ppo.zip",
+          "bytes": 1728668,
+          "sha256": "a60441c7bce5539847c6460325948854d10311552080f329f893e178db9485d4"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_cover/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_cover/base_ppo.zip",
+          "bytes": 1728668,
+          "sha256": "b7756c7da3c59016428835f4fdae4f33de027f579699731408ca46c9cc6fe604"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_cover/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_cover/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_cover/calibration.json",
+          "bytes": 6063,
+          "sha256": "990b0952f53ad854b817588f414c22fd6991be9a6ad591b478807b6ca677fa87"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_invconstr/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_invconstr/base_ppo.zip",
+          "bytes": 1728668,
+          "sha256": "a624169cd446f44a9db4ae6e09a4201408c1b3c5073fdff5b693a3e6a3643432"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_invconstr/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_invconstr/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_invconstr/calibration.json",
+          "bytes": 6051,
+          "sha256": "5c1b7d299a302c826043b75239410810cb587b7accf6b2f600d5a58e9b6edd09"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_realinv/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_realinv/base_ppo.zip",
+          "bytes": 1728668,
+          "sha256": "36f15a1e25355d6143d22eb17628b5ef4921b497d2bb3a34cf76419e994ec297"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_realinv/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_realinv/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_realinv/calibration.json",
+          "bytes": 6050,
+          "sha256": "b5b0ae8f065904705d77b20b528b1f4d168d3f520531432054400430b4e0ac86"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_v4/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_v4/base_ppo.zip",
+          "bytes": 1703931,
+          "sha256": "464e3e951cbf53ac5d5280816d46174aeaf244e26aec615b59809f8ddef2f20f"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_v4/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_v4/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/original/base_v4/calibration.json",
+          "bytes": 6060,
+          "sha256": "529eb5546c59fbb653f0e4db9449617d99fdffaa8790eef7ee9aabf244378570"
         }
       ]
     }

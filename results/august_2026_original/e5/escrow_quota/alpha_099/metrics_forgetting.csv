@@ -1,0 +1,3 @@
+arm,forgetting_mase_base_era,adaptation_mase_walk_era,forgetting_profit_base_era,probe_mase_base_mean,probe_mase_walk_mean,n_base_probes,n_walk_probes
+frozen,0.0,0.0,0.0,0.860411965838308,1.4944526253972132,7,12
+sdft,0.025413842826507587,0.6413235438085948,0.01206972955438045,0.8858258086648156,0.8531290815886186,7,12

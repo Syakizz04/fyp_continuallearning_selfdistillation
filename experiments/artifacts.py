@@ -49,6 +49,11 @@ GROUPS: Dict[str, tuple] = {
                   "experiments.rebuild_base_v4 (step 1)"),
     "ckpt_base_v4": ("outputs/drift/checkpoints/base_v4", ["processed_m5_v4"],
                      "experiments.rebuild_base_v4 (step 2: retrain_pricer)"),
+    # The ORIGINAL models, recovered from the old laptop on 2026-11-22 with
+    # experiments/laptop_transfer.py. Not rebuildable: the training run cannot
+    # be repeated. They produced results/august_2026_original/.
+    "ckpt_original": ("outputs/drift/checkpoints/original", ["processed_m5_v4"],
+                      "not rebuildable; recovered from the old laptop (recovered/old_laptop/_manifest.json has the hashes)"),
 }
 
 

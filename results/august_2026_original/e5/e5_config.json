@@ -1,0 +1,12 @@
+{
+  "alphas": [
+    0.99
+  ],
+  "censoring": [
+    "escrow_quota"
+  ],
+  "seed": 42,
+  "data_dir": "C:\\Users\\Syakir\\Downloads\\Projects\\fyp\\data\\processed_m5_v4",
+  "base_ckpt": "C:\\Users\\Syakir\\Downloads\\Projects\\fyp\\outputs\\drift\\checkpoints\\base_v4",
+  "anchor_from": "C:\\Users\\Syakir\\Downloads\\Projects\\fyp\\outputs\\drift\\results\\e2"
+}
