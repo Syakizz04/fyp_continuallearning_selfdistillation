@@ -128,6 +128,12 @@ class LocalInference:
         # constant columns). It must run BEFORE load_base, which rebuilds the TFT
         # architecture against that config.
         self._data = prepare_drift_data(demand_path, rl_path)
+        # The node and its retrains read only the *_full and *_base frames (and
+        # tft_full_censored, set later). The calibration and walk slices belong
+        # to the offline experiments; dropping them saves ~33 MB per node and
+        # changes no output.
+        for unused in ("tft_calib", "rl_calib", "tft_walk", "rl_walk"):
+            self._data.pop(unused, None)
 
         # `load_base()` defaults to `<drift checkpoints>/base`, which silently
         # ignores `paths.base_ckpt_dir` - so pointing a node at an alternative
