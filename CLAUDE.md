@@ -111,27 +111,39 @@ Each `*_pipeline/` directory is a self-contained package sharing a three-module 
 
 It has had one deliberate change since: `make_tft_loaders` (commit c222e7b). A series that starts after the 80/20 train/val split, such as FOODS_3_321, now trains on all its rows and is kept out of val. Before, it crashed with "Unknown category". Splits where every val series is in train are unchanged. The model architecture is untouched.
 
-## The November 2026 rebuild: which numbers are current
+## Status (2026-11-22): experiments are closed; the old laptop's files are in use
 
-The original laptop died, and the gitignored data and checkpoints went with it.
-- **Data:** v2, v3 and v4 were rebuilt and match exactly (`dataset_generator/m5/README.md`).
-- **Models:** `base` and `base_v4` were retrained (`experiments/rebuild_base_v4.py`). The rebuilt TFT is **not** the original:
-  - calibration MASE mu 0.891 vs 1.481;
-  - 6-check frozen walk **0.8970** vs 1.469544.
-  - **The originals were recovered** on 2026-11-22 (`experiments/laptop_transfer.py`).
-    They are in `outputs/drift/checkpoints/original/`, and their August tables are in `results/august_2026_original/`.
-  - The "trained on lost v1 data" theory is **wrong**:
-    - v1's `demand_forecasting.csv` is byte-identical to v4's;
-    - the base_meta config is identical;
-    - run on today's code, the original scores 1.469542 on the 6-check walk (recorded: 1.469544).
-    So the pipeline reproduces, and the original *training run* simply produced worse weights.
-- **The rebuilt models are the baseline now.** So:
-  - `1.469544` is retired as a regression number;
-  - every E2/E5/replicate number from August 2026 is from the old models and is not comparable with a rebuilt-model run (they are recovered, in `results/august_2026_original/`);
-  - the FYP1 drift results in `outputs/drift/results/`, which the dashboard shows, also come from the original TFT;
-  - E1 is unaffected, because it runs with static prices and no models.
-- **Before trusting or reproducing a result, run `python -m experiments.artifacts --verify`.** It checks the data and checkpoints on disk against the hashes in the committed `artifacts.json`.
-- **Final result tables go in `results/`, which is committed.** `outputs/` is ignored, and that is how the E2 tables were lost.
+**No more experiments.** The results are the ones obtained during FYP1 (and
+the August 2026 tables, in `results/august_2026_original/`). FYP2 is
+*implementation only*, meaning the deployed edge-cloud system and the dashboard.
+Do not propose re-running E2/E5 or retraining base models.
+
+**The deployed system must use the old laptop's models.** The laptop that died
+was recovered, and its data and checkpoints were pulled with
+`experiments/laptop_transfer.py`. They sit at the canonical paths:
+- `data/processed*` and `data/external_pricing`;
+- `outputs/drift/checkpoints/{base,base_v4,base_cover,base_invconstr,base_realinv}`.
+The edge nodes load `checkpoints/base_v4` (TFT sha256 `438efa6e0e2c...`,
+calibration MASE mu 1.481). Check a running node with `GET :8010/model`, then
+`base_files`.
+
+The November rebuild (made while the laptop was dead) is kept for reference only:
+- `data/_rebuilt/` and `outputs/drift/checkpoints/rebuilt/`;
+- `results/rebuild_2026-11/`.
+It is not used. What the rebuild established:
+- The pipeline reproduces. The original TFT, run on today's code, scores
+  1.469542 on the 6-check walk (recorded 1.469544), so `1.469544` stands as
+  the regression number.
+- v1's `demand_forecasting.csv` is byte-identical to v4's, and the configs are
+  identical. The rebuilt TFT (MASE 0.891) is better only because its training
+  run landed on better weights.
+- A few committed tables were produced on the rebuilt models: `critic_compare/`,
+  `forecast_signal/` and `e4_memory/`. E4's bytes are architecture-only, so
+  they are the same either way.
+
+- **Before trusting a result, run `python -m experiments.artifacts --verify`.**
+- **Final result tables go in `results/`, which is committed.** `outputs/` is
+  ignored, and that is how the E2 tables were lost.
 
 `initial_pipeline` no longer shares code with anything, so changes there need no mirroring — the old "mirror it into the other package" rule is gone with `hybrid_pipeline`.
 

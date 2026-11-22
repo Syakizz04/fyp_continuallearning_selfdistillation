@@ -169,6 +169,16 @@ class LocalInference:
         self.sdft_alpha = alpha
 
         self.ckpt_dir = str(ckpt_dir)
+        # Which files this node is serving, so "is it the old laptop's model?"
+        # is one GET /model away instead of a weights comparison.
+        import hashlib  # noqa: PLC0415
+        self.base_files = {
+            "ckpt_dir": str(ckpt_dir),
+            "calibration": str(calib),
+            "tft_sha256": hashlib.sha256((ckpt_dir / "base_tft.ckpt").read_bytes()).hexdigest(),
+            "ppo_sha256": hashlib.sha256((ckpt_dir / "base_ppo.zip").read_bytes()).hexdigest(),
+            "calibration_mase_mu": (base["calibration"] or {}).get("forecasting", {}).get("mase_mu"),
+        }
         self._forecaster = base["forecaster"]
         self._pricer = base["pricer"]
         self._train_ds = base["train_ds"]

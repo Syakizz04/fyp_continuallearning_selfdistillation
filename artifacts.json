@@ -1,6 +1,6 @@
 {
-  "written": "2026-11-22 14:04:38",
-  "git_head_when_written": "ec6f6504777e4090262cc1c2e80cd88c7b467f94",
+  "written": "2026-11-22 14:08:13",
+  "git_head_when_written": "f5e8ca2ebfa37b4e3f6c9524a6bcaea099a865b0",
   "groups": {
     "m5_raw": {
       "dir": "data/m5_raw",
@@ -24,15 +24,96 @@
         }
       ]
     },
-    "external_prior": {
+    "external_pricing": {
       "dir": "data/external_pricing",
       "built_from": [],
-      "rebuild": "prior.json, re-entered by hand: mu -0.524, tau 0.313",
+      "rebuild": "old laptop (dunnhumby download + the fitted prior.json)",
       "files": [
         {
+          "path": "data/external_pricing/campaign_desc.csv",
+          "bytes": 540,
+          "sha256": "632535c6bcdd97b5681e84c2c0652ddc4eaca8a0f899a3bb37dae8dbdc089684"
+        },
+        {
+          "path": "data/external_pricing/campaign_table.csv",
+          "bytes": 95874,
+          "sha256": "a716f88953c9ddf8847e191d862e8d022afd19cf7419f52cbe6dde950a121f21"
+        },
+        {
+          "path": "data/external_pricing/causal_data.csv",
+          "bytes": 695858427,
+          "sha256": "60ed7021fefc209c0caf36fcf95d1e93693775acfdac01fc9ee38273da88937a"
+        },
+        {
+          "path": "data/external_pricing/coupon.csv",
+          "bytes": 2822804,
+          "sha256": "718f4d466df8a54bbff45f340e0b601049721b0715503394a601bac3093c727d"
+        },
+        {
+          "path": "data/external_pricing/coupon_redempt.csv",
+          "bytes": 54108,
+          "sha256": "70a98f3bfb28be0dd850f19c8d806d2a23e44014546651367b21538db6fba1f8"
+        },
+        {
+          "path": "data/external_pricing/dunnhumby_panel.csv",
+          "bytes": 2355390,
+          "sha256": "5d9e19bbce05d72b9ee265b5529a33bb2e0f60cf60b135ddcc121e8797964ed3"
+        },
+        {
+          "path": "data/external_pricing/hh_demographic.csv",
+          "bytes": 44349,
+          "sha256": "aeb10246d0c4f3d3433d1f441265b6c7e70b0926129b834a3b589517948b9f22"
+        },
+        {
           "path": "data/external_pricing/prior.json",
-          "bytes": 236,
-          "sha256": "5b204adc3fbb6ce1caeef895a3b511421c9ef9d35e6a742752fc982ad3114af2"
+          "bytes": 312,
+          "sha256": "b7e68518bf81ac3be3fea2c080228cd013bfa146f57cce3666203c5f6bba2c37"
+        },
+        {
+          "path": "data/external_pricing/product.csv",
+          "bytes": 6429896,
+          "sha256": "7ecbcec41e0f1e5a51b43a359965cc50dc5586a2b900a378b64032750fedc949"
+        },
+        {
+          "path": "data/external_pricing/transaction_data.csv",
+          "bytes": 141742346,
+          "sha256": "3a685c0729cef664d634486189f774518b84f53cde7cbf701a5963238692b476"
+        }
+      ]
+    },
+    "processed_fyp1": {
+      "dir": "data/processed",
+      "built_from": [],
+      "rebuild": "old laptop (FYP1 synthetic data)",
+      "files": [
+        {
+          "path": "data/processed/demand_forecasting.csv",
+          "bytes": 1360499,
+          "sha256": "26e1f859b5227ded5faad9915231f83709dd09d11eb99ee1dc77bfa102bc24ff"
+        },
+        {
+          "path": "data/processed/rl_environment.csv",
+          "bytes": 1082907,
+          "sha256": "33a3f8a5d436a95b3975ec27af63560f0bd7e845c0cda77677c3bcc382e2137b"
+        }
+      ]
+    },
+    "processed_m5_v1": {
+      "dir": "data/processed_m5",
+      "built_from": [
+        "m5_raw"
+      ],
+      "rebuild": "old laptop; not rebuildable",
+      "files": [
+        {
+          "path": "data/processed_m5/demand_forecasting.csv",
+          "bytes": 12122019,
+          "sha256": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca"
+        },
+        {
+          "path": "data/processed_m5/rl_environment.csv",
+          "bytes": 19106923,
+          "sha256": "b7927404a0ed0fabeac98c6ef9784b57cae0dca1b7f1fbd1e77545085eb75ecc"
         }
       ]
     },
@@ -40,9 +121,9 @@
       "dir": "data/processed_m5_v2",
       "built_from": [
         "m5_raw",
-        "external_prior"
+        "external_pricing"
       ],
-      "rebuild": "dataset_generator.m5.build_m5 (flags in dataset_generator/m5/README.md)",
+      "rebuild": "old laptop",
       "files": [
         {
           "path": "data/processed_m5_v2/demand_forecasting.csv",
@@ -51,13 +132,13 @@
         },
         {
           "path": "data/processed_m5_v2/elasticity_report.csv",
-          "bytes": 9563,
-          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+          "bytes": 9549,
+          "sha256": "fafd1f054600395e719682571a0ed998c5699e779da0b2bf467e9d02cee2b0f2"
         },
         {
           "path": "data/processed_m5_v2/rl_environment.csv",
-          "bytes": 21063499,
-          "sha256": "e431f99f6e6d6dda241c2340a9fed1c6e638ec77b9fa313fdeb881985b46e45a"
+          "bytes": 20664655,
+          "sha256": "b8cb9ae90e0720ed55298ac3f29cecfcc91e35a9a8372d1a8fe675aae5ddd8ca"
         }
       ]
     },
@@ -66,7 +147,7 @@
       "built_from": [
         "processed_m5_v2"
       ],
-      "rebuild": "dataset_generator.m5.rebuild_inventory",
+      "rebuild": "old laptop",
       "files": [
         {
           "path": "data/processed_m5_v3/demand_forecasting.csv",
@@ -75,13 +156,13 @@
         },
         {
           "path": "data/processed_m5_v3/elasticity_report.csv",
-          "bytes": 9563,
-          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+          "bytes": 9549,
+          "sha256": "fafd1f054600395e719682571a0ed998c5699e779da0b2bf467e9d02cee2b0f2"
         },
         {
           "path": "data/processed_m5_v3/rl_environment.csv",
-          "bytes": 20839119,
-          "sha256": "4f8d4fda501912f3ba06df28d324e14395493bf60c41a5a9cb0ea74c6e5fa3c9"
+          "bytes": 20840787,
+          "sha256": "9febeb1ea794b167eb380acc8ec1b6daf496518fd5ba496198952c91d9bc3622"
         }
       ]
     },
@@ -90,7 +171,7 @@
       "built_from": [
         "processed_m5_v3"
       ],
-      "rebuild": "dataset_generator.m5.refresh_rl_features",
+      "rebuild": "old laptop",
       "files": [
         {
           "path": "data/processed_m5_v4/demand_forecasting.csv",
@@ -99,18 +180,18 @@
         },
         {
           "path": "data/processed_m5_v4/elasticity_report.csv",
-          "bytes": 9563,
-          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+          "bytes": 9549,
+          "sha256": "fafd1f054600395e719682571a0ed998c5699e779da0b2bf467e9d02cee2b0f2"
         },
         {
           "path": "data/processed_m5_v4/refresh_report.json",
-          "bytes": 913,
-          "sha256": "7159c37d7dad83edff047a4e9595d402ac680870fddecb722420a525e906e1f1"
+          "bytes": 881,
+          "sha256": "8d9843ed7695331f913e7e69f2e7a169c260fda847e1f747305485db4bb60656"
         },
         {
           "path": "data/processed_m5_v4/rl_environment.csv",
-          "bytes": 20797014,
-          "sha256": "5ea3c5500229996395551abcb375aad0d7310f293c1d1edea6b78704c2133051"
+          "bytes": 20796769,
+          "sha256": "4819d98e2e1ad667ef77776b97234684ff06bb00a661d733a11d89f2951a8c2a"
         }
       ]
     },
@@ -119,7 +200,7 @@
       "built_from": [
         "processed_m5_v4"
       ],
-      "rebuild": "experiments.rebuild_base_v4 (step 1)",
+      "rebuild": "old laptop; not rebuildable",
       "files": [
         {
           "path": "outputs/drift/checkpoints/base/base_meta.json",
@@ -128,23 +209,18 @@
         },
         {
           "path": "outputs/drift/checkpoints/base/base_ppo.zip",
-          "bytes": 1703578,
-          "sha256": "e42edcdde2e7c83cc23e6a7f83e51ba32405bd547ab4adf3f3c316b27dfc9558"
+          "bytes": 1728668,
+          "sha256": "a60441c7bce5539847c6460325948854d10311552080f329f893e178db9485d4"
         },
         {
           "path": "outputs/drift/checkpoints/base/base_tft.ckpt",
-          "bytes": 14474960,
-          "sha256": "3175b9ace00535871922104ea30e8ff68e20d146644e7db3844f15012b0b4283"
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
         },
         {
           "path": "outputs/drift/checkpoints/base/base_tft_dataset.pkl",
-          "bytes": 5539037,
-          "sha256": "faabf130cf7b911636a92c82f61b12a6b72a5776d5022eea0ff9025bc6cb529f"
-        },
-        {
-          "path": "outputs/drift/checkpoints/base/calibration.json",
-          "bytes": 5859,
-          "sha256": "fd202f59c8b558f451ba3a82d19e8dcb9c6dd2129681062854e1c4d3c465b0d2"
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
         }
       ]
     },
@@ -153,7 +229,7 @@
       "built_from": [
         "processed_m5_v4"
       ],
-      "rebuild": "experiments.rebuild_base_v4 (step 2: retrain_pricer)",
+      "rebuild": "old laptop; not rebuildable. The deployed system loads this one",
       "files": [
         {
           "path": "outputs/drift/checkpoints/base_v4/base_meta.json",
@@ -162,152 +238,258 @@
         },
         {
           "path": "outputs/drift/checkpoints/base_v4/base_ppo.zip",
-          "bytes": 1703578,
-          "sha256": "ad767da277755d7ab8bb6e43441c6283f8c568c2fb9f26f73820114662bd3670"
-        },
-        {
-          "path": "outputs/drift/checkpoints/base_v4/base_tft.ckpt",
-          "bytes": 14474960,
-          "sha256": "3175b9ace00535871922104ea30e8ff68e20d146644e7db3844f15012b0b4283"
-        },
-        {
-          "path": "outputs/drift/checkpoints/base_v4/base_tft_dataset.pkl",
-          "bytes": 5539037,
-          "sha256": "faabf130cf7b911636a92c82f61b12a6b72a5776d5022eea0ff9025bc6cb529f"
-        },
-        {
-          "path": "outputs/drift/checkpoints/base_v4/calibration.json",
-          "bytes": 6097,
-          "sha256": "dfe863de432ebc6140e2c685511fcdc312fda7817df453536d5f4704245be0f6"
-        }
-      ]
-    },
-    "ckpt_original": {
-      "dir": "outputs/drift/checkpoints/original",
-      "built_from": [
-        "processed_m5_v4"
-      ],
-      "rebuild": "not rebuildable; recovered from the old laptop (recovered/old_laptop/_manifest.json has the hashes)",
-      "files": [
-        {
-          "path": "outputs/drift/checkpoints/original/base/base_meta.json",
-          "bytes": 1206,
-          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base/base_ppo.zip",
-          "bytes": 1728668,
-          "sha256": "a60441c7bce5539847c6460325948854d10311552080f329f893e178db9485d4"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base/base_tft.ckpt",
-          "bytes": 14474896,
-          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base/base_tft_dataset.pkl",
-          "bytes": 5525981,
-          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_cover/base_meta.json",
-          "bytes": 1206,
-          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_cover/base_ppo.zip",
-          "bytes": 1728668,
-          "sha256": "b7756c7da3c59016428835f4fdae4f33de027f579699731408ca46c9cc6fe604"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_cover/base_tft.ckpt",
-          "bytes": 14474896,
-          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_cover/base_tft_dataset.pkl",
-          "bytes": 5525981,
-          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_cover/calibration.json",
-          "bytes": 6063,
-          "sha256": "990b0952f53ad854b817588f414c22fd6991be9a6ad591b478807b6ca677fa87"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_invconstr/base_meta.json",
-          "bytes": 1206,
-          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_invconstr/base_ppo.zip",
-          "bytes": 1728668,
-          "sha256": "a624169cd446f44a9db4ae6e09a4201408c1b3c5073fdff5b693a3e6a3643432"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_invconstr/base_tft.ckpt",
-          "bytes": 14474896,
-          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_invconstr/base_tft_dataset.pkl",
-          "bytes": 5525981,
-          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_invconstr/calibration.json",
-          "bytes": 6051,
-          "sha256": "5c1b7d299a302c826043b75239410810cb587b7accf6b2f600d5a58e9b6edd09"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_realinv/base_meta.json",
-          "bytes": 1206,
-          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_realinv/base_ppo.zip",
-          "bytes": 1728668,
-          "sha256": "36f15a1e25355d6143d22eb17628b5ef4921b497d2bb3a34cf76419e994ec297"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_realinv/base_tft.ckpt",
-          "bytes": 14474896,
-          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_realinv/base_tft_dataset.pkl",
-          "bytes": 5525981,
-          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_realinv/calibration.json",
-          "bytes": 6050,
-          "sha256": "b5b0ae8f065904705d77b20b528b1f4d168d3f520531432054400430b4e0ac86"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_v4/base_meta.json",
-          "bytes": 1206,
-          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
-        },
-        {
-          "path": "outputs/drift/checkpoints/original/base_v4/base_ppo.zip",
           "bytes": 1703931,
           "sha256": "464e3e951cbf53ac5d5280816d46174aeaf244e26aec615b59809f8ddef2f20f"
         },
         {
-          "path": "outputs/drift/checkpoints/original/base_v4/base_tft.ckpt",
+          "path": "outputs/drift/checkpoints/base_v4/base_tft.ckpt",
           "bytes": 14474896,
           "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
         },
         {
-          "path": "outputs/drift/checkpoints/original/base_v4/base_tft_dataset.pkl",
+          "path": "outputs/drift/checkpoints/base_v4/base_tft_dataset.pkl",
           "bytes": 5525981,
           "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
         },
         {
-          "path": "outputs/drift/checkpoints/original/base_v4/calibration.json",
+          "path": "outputs/drift/checkpoints/base_v4/calibration.json",
           "bytes": 6060,
           "sha256": "529eb5546c59fbb653f0e4db9449617d99fdffaa8790eef7ee9aabf244378570"
+        }
+      ]
+    },
+    "ckpt_base_cover": {
+      "dir": "outputs/drift/checkpoints/base_cover",
+      "built_from": [
+        "processed_m5_v4"
+      ],
+      "rebuild": "old laptop",
+      "files": [
+        {
+          "path": "outputs/drift/checkpoints/base_cover/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_cover/base_ppo.zip",
+          "bytes": 1728668,
+          "sha256": "b7756c7da3c59016428835f4fdae4f33de027f579699731408ca46c9cc6fe604"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_cover/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_cover/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_cover/calibration.json",
+          "bytes": 6063,
+          "sha256": "990b0952f53ad854b817588f414c22fd6991be9a6ad591b478807b6ca677fa87"
+        }
+      ]
+    },
+    "ckpt_base_invconstr": {
+      "dir": "outputs/drift/checkpoints/base_invconstr",
+      "built_from": [
+        "processed_m5_v4"
+      ],
+      "rebuild": "old laptop",
+      "files": [
+        {
+          "path": "outputs/drift/checkpoints/base_invconstr/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_invconstr/base_ppo.zip",
+          "bytes": 1728668,
+          "sha256": "a624169cd446f44a9db4ae6e09a4201408c1b3c5073fdff5b693a3e6a3643432"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_invconstr/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_invconstr/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_invconstr/calibration.json",
+          "bytes": 6051,
+          "sha256": "5c1b7d299a302c826043b75239410810cb587b7accf6b2f600d5a58e9b6edd09"
+        }
+      ]
+    },
+    "ckpt_base_realinv": {
+      "dir": "outputs/drift/checkpoints/base_realinv",
+      "built_from": [
+        "processed_m5_v4"
+      ],
+      "rebuild": "old laptop",
+      "files": [
+        {
+          "path": "outputs/drift/checkpoints/base_realinv/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_realinv/base_ppo.zip",
+          "bytes": 1728668,
+          "sha256": "36f15a1e25355d6143d22eb17628b5ef4921b497d2bb3a34cf76419e994ec297"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_realinv/base_tft.ckpt",
+          "bytes": 14474896,
+          "sha256": "438efa6e0e2c42ca5eb05b2c95ee884baf50dfe9e7e662ca2a4b5f14111b1a2b"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_realinv/base_tft_dataset.pkl",
+          "bytes": 5525981,
+          "sha256": "0bece8204ad2ed7c5e646f7cf470d51f2a09ea299749b90f42595a2306661afb"
+        },
+        {
+          "path": "outputs/drift/checkpoints/base_realinv/calibration.json",
+          "bytes": 6050,
+          "sha256": "b5b0ae8f065904705d77b20b528b1f4d168d3f520531432054400430b4e0ac86"
+        }
+      ]
+    },
+    "rebuilt_data": {
+      "dir": "data/_rebuilt",
+      "built_from": [
+        "m5_raw"
+      ],
+      "rebuild": "dataset_generator/m5/README.md, rebuilt 2026-11 while the laptop was dead",
+      "files": [
+        {
+          "path": "data/_rebuilt/external_pricing/prior.json",
+          "bytes": 236,
+          "sha256": "5b204adc3fbb6ce1caeef895a3b511421c9ef9d35e6a742752fc982ad3114af2"
+        },
+        {
+          "path": "data/_rebuilt/processed/demand_forecasting.csv",
+          "bytes": 1360499,
+          "sha256": "26e1f859b5227ded5faad9915231f83709dd09d11eb99ee1dc77bfa102bc24ff"
+        },
+        {
+          "path": "data/_rebuilt/processed/rl_environment.csv",
+          "bytes": 1082907,
+          "sha256": "33a3f8a5d436a95b3975ec27af63560f0bd7e845c0cda77677c3bcc382e2137b"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v2/demand_forecasting.csv",
+          "bytes": 12122019,
+          "sha256": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v2/elasticity_report.csv",
+          "bytes": 9563,
+          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v2/rl_environment.csv",
+          "bytes": 21063499,
+          "sha256": "e431f99f6e6d6dda241c2340a9fed1c6e638ec77b9fa313fdeb881985b46e45a"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v3/demand_forecasting.csv",
+          "bytes": 12122019,
+          "sha256": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v3/elasticity_report.csv",
+          "bytes": 9563,
+          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v3/rl_environment.csv",
+          "bytes": 20839119,
+          "sha256": "4f8d4fda501912f3ba06df28d324e14395493bf60c41a5a9cb0ea74c6e5fa3c9"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v4/demand_forecasting.csv",
+          "bytes": 12122019,
+          "sha256": "7eaf9ef8b1b04627ff27fa97969d706de8688a517d7e6d720b07274e004ef1ca"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v4/elasticity_report.csv",
+          "bytes": 9563,
+          "sha256": "85872aaa42ac45d0400714aeb625a5b40fe29eedc0a1d0f257dc57b80e371978"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v4/refresh_report.json",
+          "bytes": 913,
+          "sha256": "7159c37d7dad83edff047a4e9595d402ac680870fddecb722420a525e906e1f1"
+        },
+        {
+          "path": "data/_rebuilt/processed_m5_v4/rl_environment.csv",
+          "bytes": 20797014,
+          "sha256": "5ea3c5500229996395551abcb375aad0d7310f293c1d1edea6b78704c2133051"
+        }
+      ]
+    },
+    "rebuilt_ckpt": {
+      "dir": "outputs/drift/checkpoints/rebuilt",
+      "built_from": [
+        "rebuilt_data"
+      ],
+      "rebuild": "experiments.rebuild_base_v4",
+      "files": [
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base/base_ppo.zip",
+          "bytes": 1703578,
+          "sha256": "e42edcdde2e7c83cc23e6a7f83e51ba32405bd547ab4adf3f3c316b27dfc9558"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base/base_tft.ckpt",
+          "bytes": 14474960,
+          "sha256": "3175b9ace00535871922104ea30e8ff68e20d146644e7db3844f15012b0b4283"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base/base_tft_dataset.pkl",
+          "bytes": 5539037,
+          "sha256": "faabf130cf7b911636a92c82f61b12a6b72a5776d5022eea0ff9025bc6cb529f"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base/calibration.json",
+          "bytes": 5859,
+          "sha256": "fd202f59c8b558f451ba3a82d19e8dcb9c6dd2129681062854e1c4d3c465b0d2"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base_v4/base_meta.json",
+          "bytes": 1206,
+          "sha256": "bf2f9bc9328e629af7f50a0a60d0366f2c51a0a3eb5ea05f71dec48332198316"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base_v4/base_ppo.zip",
+          "bytes": 1703578,
+          "sha256": "ad767da277755d7ab8bb6e43441c6283f8c568c2fb9f26f73820114662bd3670"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base_v4/base_tft.ckpt",
+          "bytes": 14474960,
+          "sha256": "3175b9ace00535871922104ea30e8ff68e20d146644e7db3844f15012b0b4283"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base_v4/base_tft_dataset.pkl",
+          "bytes": 5539037,
+          "sha256": "faabf130cf7b911636a92c82f61b12a6b72a5776d5022eea0ff9025bc6cb529f"
+        },
+        {
+          "path": "outputs/drift/checkpoints/rebuilt/base_v4/calibration.json",
+          "bytes": 6097,
+          "sha256": "dfe863de432ebc6140e2c685511fcdc312fda7817df453536d5f4704245be0f6"
         }
       ]
     }

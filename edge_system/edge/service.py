@@ -326,6 +326,7 @@ def model() -> Dict:
         "strategy": NODE.strategy,
         "version": inf.version.as_dict(),
         "load_seconds": inf.load_seconds,
+        "base_files": getattr(inf, "base_files", None),
         "retrainer": NODE.retrainer.status() if NODE.retrainer else None,
         "history": NODE.retrainer.recent() if NODE.retrainer else [],
     }

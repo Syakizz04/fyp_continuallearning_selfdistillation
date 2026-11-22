@@ -34,26 +34,30 @@ MANIFEST = ROOT / "artifacts.json"
 
 # name -> (directory, built_from, how to rebuild)
 GROUPS: Dict[str, tuple] = {
+    # Everything at the canonical paths is the OLD LAPTOP's, recovered on
+    # 2026-11-22 with experiments/laptop_transfer.py. These are the files the
+    # FYP1 results and the deployed system use. The November rebuild is kept
+    # under data/_rebuilt/ and checkpoints/rebuilt/ and is not used.
     "m5_raw": ("data/m5_raw", [],
                "m5-forecasting-accuracy.zip from github.com/KunalArora/kaggle-m5-forecasting "
                "(zip md5 4123b9f46f7c24ad237fe3b89dfc821b); see dataset_generator/m5/README.md"),
-    "external_prior": ("data/external_pricing", [],
-                       "prior.json, re-entered by hand: mu -0.524, tau 0.313"),
-    "processed_m5_v2": ("data/processed_m5_v2", ["m5_raw", "external_prior"],
-                        "dataset_generator.m5.build_m5 (flags in dataset_generator/m5/README.md)"),
-    "processed_m5_v3": ("data/processed_m5_v3", ["processed_m5_v2"],
-                        "dataset_generator.m5.rebuild_inventory"),
-    "processed_m5_v4": ("data/processed_m5_v4", ["processed_m5_v3"],
-                        "dataset_generator.m5.refresh_rl_features"),
-    "ckpt_base": ("outputs/drift/checkpoints/base", ["processed_m5_v4"],
-                  "experiments.rebuild_base_v4 (step 1)"),
+    "external_pricing": ("data/external_pricing", [],
+                         "old laptop (dunnhumby download + the fitted prior.json)"),
+    "processed_fyp1": ("data/processed", [], "old laptop (FYP1 synthetic data)"),
+    "processed_m5_v1": ("data/processed_m5", ["m5_raw"], "old laptop; not rebuildable"),
+    "processed_m5_v2": ("data/processed_m5_v2", ["m5_raw", "external_pricing"], "old laptop"),
+    "processed_m5_v3": ("data/processed_m5_v3", ["processed_m5_v2"], "old laptop"),
+    "processed_m5_v4": ("data/processed_m5_v4", ["processed_m5_v3"], "old laptop"),
+    "ckpt_base": ("outputs/drift/checkpoints/base", ["processed_m5_v4"], "old laptop; not rebuildable"),
     "ckpt_base_v4": ("outputs/drift/checkpoints/base_v4", ["processed_m5_v4"],
-                     "experiments.rebuild_base_v4 (step 2: retrain_pricer)"),
-    # The ORIGINAL models, recovered from the old laptop on 2026-11-22 with
-    # experiments/laptop_transfer.py. Not rebuildable: the training run cannot
-    # be repeated. They produced results/august_2026_original/.
-    "ckpt_original": ("outputs/drift/checkpoints/original", ["processed_m5_v4"],
-                      "not rebuildable; recovered from the old laptop (recovered/old_laptop/_manifest.json has the hashes)"),
+                     "old laptop; not rebuildable. The deployed system loads this one"),
+    "ckpt_base_cover": ("outputs/drift/checkpoints/base_cover", ["processed_m5_v4"], "old laptop"),
+    "ckpt_base_invconstr": ("outputs/drift/checkpoints/base_invconstr", ["processed_m5_v4"], "old laptop"),
+    "ckpt_base_realinv": ("outputs/drift/checkpoints/base_realinv", ["processed_m5_v4"], "old laptop"),
+    # The November 2026 rebuild, kept for reference (results/rebuild_2026-11/).
+    "rebuilt_data": ("data/_rebuilt", ["m5_raw"],
+                     "dataset_generator/m5/README.md, rebuilt 2026-11 while the laptop was dead"),
+    "rebuilt_ckpt": ("outputs/drift/checkpoints/rebuilt", ["rebuilt_data"], "experiments.rebuild_base_v4"),
 }
 
 
