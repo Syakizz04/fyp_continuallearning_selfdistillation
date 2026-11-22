@@ -99,9 +99,20 @@ SYSTEM_CONFIG: Dict = {
         #               matches it (12/17, 11/17) or beats it (marketplace 9/17 vs
         #               3/17), because price is not in V(s)'s inputs. The earlier
         #               "13/15 and 12/15" figures (old pricer, lost script) do
-        #               not reproduce. A demo setting; E2 does not use the node
-        #               monitor.
-        "rl_signal": "critic",
+        #               not reproduce.
+        #   "markup"  - the day's training reward over M x base-price turnover,
+        #               with M one number fitted on the training window
+        #               (LocalInference.markup_outcome). It measures what
+        #               "critic" measures, with no network and no regression
+        #               onto V. In replay: stuck -10% pos 12/17, web 11/17,
+        #               marketplace 9/17; 2x/6x price-sensitive at least as
+        #               well as critic; 0 false alarms in 3 years (critic 0.67
+        #               a year on pos/web). Same limits as critic: one-sided,
+        #               so +10% and a stuck base price go unseen, and an
+        #               elasticity shift is mostly invisible. Default since
+        #               2026-11-22. "critic" stays one flag away.
+        # A demo setting; E2 does not use the node monitor.
+        "rl_signal": "markup",
         "rl_window_days": 7,
         "rl_warmup_days": 28,
         "rl_k_sigma": 2.5,

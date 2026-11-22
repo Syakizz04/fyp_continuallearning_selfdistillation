@@ -176,54 +176,9 @@ def world_weights() -> Dict[str, float]:
 
 
 # ─── The markup baseline ─────────────────────────────────────────────────────
-
-def markup_coefficient(inf) -> float:
-    """M with training reward ~= M x base_price x sold / 1000, fitted over the
-    training window at the pricer's own prices. It is built the same way
-    LocalInference.critic_line builds its fit, so both baselines see the same
-    rows."""
-    import torch  # noqa: PLC0415
-    env = inf._shared_env()
-    pricer = inf.pricer()
-    base_dates = pd.to_datetime(inf.data["rl_base"]["date"]).unique()
-    idx = np.flatnonzero(pd.to_datetime(env.df["date"]).isin(base_dates).to_numpy())
-    obs = np.stack([env._get_obs(int(i)) for i in idx]).astype(np.float32)
-    with torch.no_grad():
-        t = torch.as_tensor(obs, device=pricer.policy.device)
-        acts = pricer.policy._predict(t, deterministic=True).cpu().numpy().ravel()
-    base = env._base_price[idx].astype(float)
-    price = base * (1.0 + np.asarray(env.price_tiers, dtype=float)[acts])
-    demand = np.maximum(env._realized_demand[idx].astype(float), 0.0)
-    asked = np.maximum(0.0, np.round(demand * (price / np.maximum(base, 1e-6))
-                                     ** env._elasticity[idx].astype(float)))
-    stock = env._inventory_raw[idx].astype(float) if env.inventory_constrained else asked
-    sold = np.minimum(asked, stock)
-    r = inf._reward(env, idx, price, sold, asked - sold)
-    denom = float(np.sum(base * sold) / 1000.0)
-    return float(np.sum(r) / denom) if denom > 0 else 0.0
-
-
-def markup_outcome(inf, m_coef: float, outcomes, share: float) -> Optional[Tuple[float, float]]:
-    """(actual, expected) for the markup signal. Actual is the same training
-    reward pricing_outcome sums, so only the expectation differs."""
-    if share <= 0:
-        return None
-    env = inf._shared_env()
-    rows, price, sold, lost, base = [], [], [], [], []
-    for o in outcomes:
-        i = inf._row_index.get((o["sku"], pd.Timestamp(o["date"])))
-        if i is None:
-            continue
-        rows.append(i)
-        price.append(o["price"])
-        sold.append(o["sold"] / share)
-        lost.append(o["refused"] / share)
-        base.append(o["base_price"])
-    if not rows:
-        return None
-    r = inf._reward(env, np.asarray(rows), np.asarray(price), np.asarray(sold), np.asarray(lost))
-    expected = m_coef * float(np.sum(np.asarray(base) * np.asarray(sold)) / 1000.0)
-    return float(np.sum(r)), expected
+# Implemented in LocalInference.markup_coefficient / markup_outcome, the code
+# a node runs with models.rl_signal = "markup", so this replay measures the
+# deployed signal rather than a copy of it.
 
 
 # ─── Feeding the monitors ────────────────────────────────────────────────────
@@ -253,7 +208,7 @@ def feed(inf, m_coef, monitors, world_out, tick: int, d: str) -> Dict[tuple, boo
         res = inf.pricing_outcome(sim_date=d, outcomes=got["pricing"], share=shares[ch])
         fired[(ch, "critic")] = _update(monitors[(ch, "critic")], tick, d,
                                         *(res if res else (None, None)))
-        res = markup_outcome(inf, m_coef, got["pricing"], shares[ch])
+        res = inf.markup_outcome(sim_date=d, outcomes=got["pricing"], share=shares[ch])
         fired[(ch, "markup")] = _update(monitors[(ch, "markup")], tick, d,
                                         *(res if res else (None, None)))
     for key, f in fired.items():
@@ -356,7 +311,7 @@ def main() -> None:
     inf = LocalInference("replay")
     inf.load()
     a, b = inf.critic_line()
-    m_coef = markup_coefficient(inf)
+    m_coef = inf.markup_coefficient()
     print(f"[critic_compare] models from {inf.ckpt_dir} loaded in {time.perf_counter()-t0:.0f}s;"
           f" critic line r = {a:.4f} + {b:.4f} V; markup M = {m_coef:.4f}")
 

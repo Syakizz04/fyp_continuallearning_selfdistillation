@@ -101,6 +101,9 @@ class LocalInference:
         self._critic_fit_for: Optional[int] = None
         self._critic_line: Optional[tuple] = None
         self._critic_lock = threading.Lock()
+        # The markup signal's one fitted number, per pricer object (`markup_outcome`).
+        self._markup_fit_for: Optional[int] = None
+        self._markup_coef: Optional[float] = None
 
     # ── Startup ─────────────────────────────────────────────────────────────
 
@@ -411,6 +414,68 @@ class LocalInference:
         obs = np.stack([self._observation(env, i, q, d) for i, q, d in zip(rows, inv, asked)])
         v = self._critic_values(self.pricer(), obs)
         return float(np.sum(r)), float(np.sum(a + b * v))
+
+    # ── Pricing drift signal: the markup index (models.rl_signal = "markup") ──
+    #
+    # The day's training reward against M x sum(base_price x sold) / 1000. M is
+    # ONE number: the reward per unit of base-price turnover the pricer earned
+    # over its training window at its own prices. The ratio falls when the
+    # pricer's margin per unit falls below what it normally earns. That is what
+    # the critic signal measures too (see the block above), and replay shows
+    # this matching or beating it with no network call (results/critic_compare/).
+    # Refitted for each new pricer, like the critic line.
+
+    def markup_coefficient(self) -> float:
+        pricer = self.pricer()
+        with self._critic_lock:
+            if self._markup_fit_for == id(pricer) and self._markup_coef is not None:
+                return self._markup_coef
+        import torch  # noqa: PLC0415
+        env = self._shared_env()
+        base_dates = pd.to_datetime(self.data["rl_base"]["date"]).unique()
+        idx = np.flatnonzero(pd.to_datetime(env.df["date"]).isin(base_dates).to_numpy())
+        obs = np.stack([env._get_obs(int(i)) for i in idx]).astype(np.float32)
+        with torch.no_grad():
+            t = torch.as_tensor(obs, device=pricer.policy.device)
+            acts = pricer.policy._predict(t, deterministic=True).cpu().numpy().ravel()
+        base = env._base_price[idx].astype(float)
+        price = base * (1.0 + np.asarray(env.price_tiers, dtype=float)[acts])
+        demand = np.maximum(env._realized_demand[idx].astype(float), 0.0)
+        asked = np.maximum(0.0, np.round(demand * (price / np.maximum(base, 1e-6))
+                                         ** env._elasticity[idx].astype(float)))
+        stock = env._inventory_raw[idx].astype(float) if env.inventory_constrained else asked
+        sold = np.minimum(asked, stock)
+        r = self._reward(env, idx, price, sold, asked - sold)
+        denom = float(np.sum(base * sold) / 1000.0)
+        coef = float(np.sum(r) / denom) if denom > 0 else 0.0
+        with self._critic_lock:
+            self._markup_fit_for, self._markup_coef = id(pricer), coef
+        return coef
+
+    def markup_outcome(self, *, sim_date: str, outcomes, share: float) -> Optional[tuple]:
+        """(actual, expected) for the markup signal. `actual` is the same
+        training reward pricing_outcome sums; only the expectation differs.
+        None when nothing traded."""
+        if share <= 0:
+            return None
+        env = self._shared_env()
+        day = pd.Timestamp(sim_date)
+        rows, price, sold, lost = [], [], [], []
+        for o in outcomes:
+            i = self._row_index.get((o["sku"], day))
+            if i is None or o.get("price") is None:
+                continue
+            rows.append(i)
+            price.append(float(o["price"]))
+            sold.append(float(o["sold"]) / share)
+            lost.append(float(o["refused"]) / share)
+        if not rows:
+            return None
+        rows_a = np.asarray(rows)
+        r = self._reward(env, rows_a, np.asarray(price), np.asarray(sold), np.asarray(lost))
+        base = env._base_price[rows_a].astype(float)
+        expected = self.markup_coefficient() * float(np.sum(base * np.asarray(sold)) / 1000.0)
+        return float(np.sum(r)), expected
 
     def forecast(self, sku: str, *, sim_date: str) -> Dict:
         """
