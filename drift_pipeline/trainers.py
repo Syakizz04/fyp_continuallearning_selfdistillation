@@ -205,8 +205,27 @@ def make_tft_loaders(
         cutoff = int(len(unique_times) * 0.8)
         split_idx = unique_times[cutoff]
         val_start = max(unique_times[0], split_idx - enc_len)
-        val_df = train_df[train_df["time_idx"] >= val_start].copy()
-        train_df = train_df[train_df["time_idx"] < split_idx].copy()
+        full_df = train_df
+        val_df = full_df[full_df["time_idx"] >= val_start].copy()
+        train_df = full_df[full_df["time_idx"] < split_idx].copy()
+        # A series that starts after the split has no training rows, so the
+        # train dataset's encoder never sees it and building val_ds raises
+        # "Unknown category". Train on all of its rows instead and keep it out
+        # of val. This only changes cases that used to crash: if every val
+        # series is in train, the split is exactly as before. (Added 2026-11-21:
+        # FOODS_3_321 starts 2012-07-28, after the base-fit split of 2012-06-29.)
+        gids = fc["group_ids"]
+        tr_keys = pd.MultiIndex.from_frame(train_df[gids].drop_duplicates())
+        val_mi = pd.MultiIndex.from_frame(val_df[gids])
+        unseen = ~val_mi.isin(tr_keys)
+        if unseen.any():
+            late = pd.MultiIndex.from_frame(val_df.loc[unseen, gids].drop_duplicates())
+            full_mi = pd.MultiIndex.from_frame(full_df[gids])
+            train_df = pd.concat([train_df, full_df[full_mi.isin(late)]]).sort_values(
+                gids + ["time_idx"])
+            val_df = val_df[~unseen].copy()
+            console.print(f"  [yellow]{len(late)} series start after the train/val "
+                          f"split; trained on all their rows, excluded from val[/yellow]")
     elif val_df is not None:
         val_df = val_df.sort_values(CONFIG["forecasting"]["group_ids"] + ["time_idx"]).copy()
 
