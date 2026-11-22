@@ -16,6 +16,7 @@ Exit code is 0 only if every REQUIRED check passes.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -65,7 +66,14 @@ def main(argv=None) -> int:
             check("CUDA", PASS, f"{p.name}, {p.total_memory / 1e9:.0f} GB, "
                                 f"{p.multi_processor_count} SMs")
         else:
-            check("CUDA", FAIL, "no GPU visible - a CPU run is not worth paying for")
+            # On a rented box a CPU-only run wastes money; on your own machine it is
+            # just slow (~1 day for the pre-registered E2 on a 4-core laptop).
+            # FYP_ALLOW_CPU=1 opts in. Never mix CPU and GPU cells in one sweep.
+            if os.environ.get("FYP_ALLOW_CPU") == "1":
+                check("CUDA", PASS, "no GPU - CPU run allowed by FYP_ALLOW_CPU=1 (keep every cell on CPU)")
+            else:
+                check("CUDA", FAIL, "no GPU visible - a CPU run is not worth paying for "
+                                    "(set FYP_ALLOW_CPU=1 for a local CPU run)")
     except Exception as exc:                                  # noqa: BLE001
         check("CUDA", FAIL, f"torch import failed: {exc}")
 
